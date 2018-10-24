@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+    id 'idea'
+    id 'com.github.johnrengelman.shadow' version '1.2.4'
+}
+
+repositories {
+    mavenCentral()
+}
+
+sourceSets {
+    main {
+        java.srcDirs = ['src']
+	resources.srcDirs = ['res']
+    }
+}
+
+
+dependencies {
+    compile group: 'com.github.javaparser', name: 'javaparser-core', version: '3.6.27'
+    compile "org.ow2.asm:asm:6.2.1"
+    compile "org.ow2.asm:asm-commons:6.2.1"
+    compile "org.ow2.asm:asm-tree:6.2.1"
+    compile "org.ow2.asm:asm-util:6.2.1"
+    compile fileTree(dir: 'libs', include: '*.jar')
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'matcher.Main'
+    }
+}
+
+build.dependsOn(shadowJar);

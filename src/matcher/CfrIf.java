@@ -1,11 +1,7 @@
 package matcher;
 
 import java.io.IOException;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import org.benf.cfr.reader.api.ClassFileSource;
 import org.benf.cfr.reader.bytecode.analysis.parse.utils.Pair;
@@ -13,6 +9,7 @@ import org.benf.cfr.reader.entities.ClassFile;
 import org.benf.cfr.reader.entities.Method;
 import org.benf.cfr.reader.state.DCCommonState;
 import org.benf.cfr.reader.state.TypeUsageCollector;
+import org.benf.cfr.reader.state.TypeUsageCollectorImpl;
 import org.benf.cfr.reader.state.TypeUsageInformation;
 import org.benf.cfr.reader.util.getopt.GetOptParser;
 import org.benf.cfr.reader.util.getopt.Options;
@@ -26,7 +23,8 @@ import matcher.type.ClassInstance;
 public class CfrIf {
 	public static synchronized String decompile(ClassInstance cls, ClassFeatureExtractor extractor, boolean mapped) {
 		String name = (mapped ? cls.getMappedName(true) : cls.getName()) + ".class";
-		Options options = new GetOptParser().parse(new String[] { name }, OptionsImpl.getFactory());
+		Pair<List<String>, Options> optionsPair = new GetOptParser().parse(new String[] { name }, OptionsImpl.getFactory());
+		Options options = optionsPair.getSecond();
 		ClassFileSource source = new ClassFileSource() {
 			@Override
 			public void informAnalysisRelativePathDetail(String usePath, String specPath) {
@@ -89,7 +87,7 @@ public class CfrIf {
 		classFile = state.getClassFile(classFile.getClassType());
 		classFile.analyseTop(state);
 
-		TypeUsageCollector typeUsageCollector = new TypeUsageCollector(classFile);
+		TypeUsageCollector typeUsageCollector = new TypeUsageCollectorImpl(classFile);
 		classFile.collectTypeUsages(typeUsageCollector);
 
 		StringDumper dumper = new StringDumper(typeUsageCollector.getTypeUsageInformation(), options);

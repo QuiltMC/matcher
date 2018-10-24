@@ -536,7 +536,7 @@ class Printer extends PrettyPrintVisitor {
 				if (i.hasNext()) {
 					printer.print(",");
 					if (configuration.isColumnAlignParameters()) {
-						printer.wrapToColumn(cursorRef.column);
+						printer.indentWithAlignTo(cursorRef.column);
 					} else {
 						printer.print(" ");
 					}
@@ -575,7 +575,7 @@ class Printer extends PrettyPrintVisitor {
 	}
 
 	private void printJavaComment(final Optional<Comment> javacomment, final Void arg) {
-		if (configuration.isPrintJavaDoc()) {
+		if (configuration.isPrintJavadoc()) {
 			javacomment.ifPresent(c -> c.accept(this, arg));
 		}
 	}

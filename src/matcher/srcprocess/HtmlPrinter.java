@@ -19,20 +19,7 @@ import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.PackageDeclaration;
-import com.github.javaparser.ast.body.AnnotationDeclaration;
-import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
-import com.github.javaparser.ast.body.BodyDeclaration;
-import com.github.javaparser.ast.body.CallableDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumConstantDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.InitializerDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.JavadocComment;
@@ -104,17 +91,7 @@ import com.github.javaparser.ast.stmt.ThrowStmt;
 import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.UnparsableStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
-import com.github.javaparser.ast.type.ArrayType;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.IntersectionType;
-import com.github.javaparser.ast.type.PrimitiveType;
-import com.github.javaparser.ast.type.ReferenceType;
-import com.github.javaparser.ast.type.Type;
-import com.github.javaparser.ast.type.TypeParameter;
-import com.github.javaparser.ast.type.UnionType;
-import com.github.javaparser.ast.type.UnknownType;
-import com.github.javaparser.ast.type.VoidType;
-import com.github.javaparser.ast.type.WildcardType;
+import com.github.javaparser.ast.type.*;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.ast.visitor.VoidVisitor;
 import com.github.javaparser.printer.PrettyPrintVisitor;
@@ -127,7 +104,7 @@ import matcher.type.MethodInstance;
 public class HtmlPrinter implements VoidVisitor<Void> {
 	public HtmlPrinter(TypeResolver typeResolver) {
 		this.typeResolver = typeResolver;
-		configuration = new PrettyPrinterConfiguration().setIndent("\t").setEndOfLineCharacter("\n");
+		configuration = new PrettyPrinterConfiguration().setIndentType(PrettyPrinterConfiguration.IndentType.TABS_WITH_SPACE_ALIGN).setEndOfLineCharacter("\n");
 		printer = (new PrettyPrintVisitor(configuration) {
 			SourcePrinter getPrinter() {
 				return printer;
@@ -238,7 +215,7 @@ public class HtmlPrinter implements VoidVisitor<Void> {
 				if (i.hasNext()) {
 					printer.print(",");
 					if (configuration.isColumnAlignParameters()) {
-						printer.wrapToColumn(cursorRef.column);
+						printer.indentWithAlignTo(cursorRef.column);
 					} else {
 						printer.print(" ");
 					}
@@ -277,7 +254,7 @@ public class HtmlPrinter implements VoidVisitor<Void> {
 	}
 
 	private void printJavaComment(final Optional<Comment> javacomment, final Void arg) {
-		if (configuration.isPrintJavaDoc()) {
+		if (configuration.isPrintJavadoc()) {
 			javacomment.ifPresent(c -> c.accept(this, arg));
 		}
 	}
@@ -545,7 +522,7 @@ public class HtmlPrinter implements VoidVisitor<Void> {
 		printMemberAnnotations(n.getAnnotations(), arg);
 		printModifiers(n.getModifiers());
 		if (!n.getVariables().isEmpty()) {
-			n.getMaximumCommonType().accept(this, arg);
+			n.getMaximumCommonType().get().accept(this, arg);
 		}
 
 		printer.print(" ");
@@ -597,11 +574,12 @@ public class HtmlPrinter implements VoidVisitor<Void> {
 
 		printer.print("</span>");
 
-		Optional<NodeWithVariables> ancestor = n.getAncestorOfType(NodeWithVariables.class);
+		Optional<NodeWithVariables> ancestor = n.findAncestor(NodeWithVariables.class);
 		if (!ancestor.isPresent()) {
 			throw new RuntimeException("Unable to work with VariableDeclarator not owned by a NodeWithVariables");
 		}
-		Type commonType = ancestor.get().getMaximumCommonType();
+		Optional<Type> commonTypeOpt = ancestor.get().getMaximumCommonType();
+		Type commonType = commonTypeOpt.get();
 
 		Type type = n.getType();
 
@@ -817,18 +795,18 @@ public class HtmlPrinter implements VoidVisitor<Void> {
 			n.getScope().get().accept(this, arg);
 			if (configuration.isColumnAlignFirstMethodChain()) {
 				if (!(n.getScope().get() instanceof MethodCallExpr) || (!((MethodCallExpr)n.getScope().get()).getScope().isPresent())) {
-					printer.resetMethodChainPosition(printer.getCursor());
+					printer.reindentWithAlignToCursor();
 				} else {
-					printer.wrapToColumn(printer.peekMethodChainPosition().column);
+					printer.indentWithAlignTo(printer.getCursor().column);
 				}
 			}
 			printer.print(".");
 		}
 		printTypeArgs(n, arg);
 		n.getName().accept(this, arg);
-		printer.pushMethodChainPosition(printer.getCursor());
+		printer.reindentWithAlignToCursor();;
 		printArguments(n.getArguments(), arg);
-		printer.popMethodChainPosition();
+		printer.reindentToPreviousLevel();
 	}
 
 	@Override
@@ -1025,7 +1003,7 @@ public class HtmlPrinter implements VoidVisitor<Void> {
 		printModifiers(n.getModifiers());
 
 		if (!n.getVariables().isEmpty()) {
-			n.getMaximumCommonType().accept(this, arg);
+			n.getMaximumCommonType().get().accept(this, arg);
 		}
 		printer.print(" ");
 
@@ -1668,15 +1646,15 @@ public class HtmlPrinter implements VoidVisitor<Void> {
 	@Override
 	public void visit(ModuleProvidesStmt n, Void arg) {
 		printer.print("<span class=\"keyword\">provides</span> ");
-		n.getType().accept(this, arg);
-		printPrePostFixRequiredList(n.getWithTypes(), arg, " with ", ", ", "");
+		n.getName().accept(this, arg);
+		printPrePostFixRequiredList(n.getWith(), arg, " with ", ", ", "");
 		printer.println(";");
 	}
 
 	@Override
 	public void visit(ModuleUsesStmt n, Void arg) {
 		printer.print("<span class=\"keyword\">uses</span> ");
-		n.getType().accept(this, arg);
+		n.getName().accept(this, arg);
 		printer.println(";");
 	}
 
@@ -1691,6 +1669,16 @@ public class HtmlPrinter implements VoidVisitor<Void> {
 	@Override
 	public void visit(UnparsableStmt n, Void arg) {
 		printer.print("???;");
+	}
+
+	@Override
+	public void visit(ReceiverParameter n, Void arg) {
+		// TODO
+	}
+
+	@Override
+	public void visit(VarType n, Void arg) {
+		// TODO
 	}
 
 	private void printOrphanCommentsBeforeThisChildNode(final Node node) {
