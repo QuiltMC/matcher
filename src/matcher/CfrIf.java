@@ -1,7 +1,11 @@
 package matcher;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 import org.benf.cfr.reader.api.ClassFileSource;
 import org.benf.cfr.reader.bytecode.analysis.parse.utils.Pair;
@@ -23,8 +27,7 @@ import matcher.type.ClassInstance;
 public class CfrIf {
 	public static synchronized String decompile(ClassInstance cls, ClassFeatureExtractor extractor, boolean mapped) {
 		String name = (mapped ? cls.getMappedName(true) : cls.getName()) + ".class";
-		Pair<List<String>, Options> optionsPair = new GetOptParser().parse(new String[] { name }, OptionsImpl.getFactory());
-		Options options = optionsPair.getSecond();
+		Options options = new GetOptParser().parse(new String[] { name }, OptionsImpl.getFactory()).getSecond();
 		ClassFileSource source = new ClassFileSource() {
 			@Override
 			public void informAnalysisRelativePathDetail(String usePath, String specPath) {
