@@ -17,11 +17,12 @@ sourceSets {
 
 
 dependencies {
-    compile group: 'com.github.javaparser', name: 'javaparser-core', version: '3.7.0'
+    compile group: 'com.github.javaparser', name: 'javaparser-core', version: '3.8.0'
     compile "org.ow2.asm:asm:7.0"
     compile "org.ow2.asm:asm-commons:7.0"
     compile "org.ow2.asm:asm-tree:7.0"
     compile "org.ow2.asm:asm-util:7.0"
+    compile "org.benf:cfr:0.136"
     compile fileTree(dir: 'libs', include: '*.jar')
 }
 
