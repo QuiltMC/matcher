@@ -4,8 +4,6 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import org.objectweb.asm.tree.ClassNode;
-
 import javafx.geometry.Insets;
 import javafx.geometry.VPos;
 import javafx.scene.Node;
@@ -14,6 +12,7 @@ import javafx.scene.control.Tab;
 import javafx.scene.layout.GridPane;
 import matcher.Util;
 import matcher.Util.AFElementType;
+import matcher.gui.Gui;
 import matcher.gui.GuiConstants;
 import matcher.gui.IGuiComponent;
 import matcher.gui.ISelectionProvider;
@@ -21,10 +20,12 @@ import matcher.type.ClassInstance;
 import matcher.type.IMatchable;
 
 public class ClassInfoTab extends Tab implements IGuiComponent {
-	public ClassInfoTab(ISelectionProvider selectionProvider) {
+	public ClassInfoTab(Gui gui, ISelectionProvider selectionProvider, boolean unmatchedTmp) {
 		super("info");
 
+		this.gui = gui;
 		this.selectionProvider = selectionProvider;
+		this.unmatchedTmp = unmatchedTmp;
 
 		init();
 	}
@@ -37,15 +38,19 @@ public class ClassInfoTab extends Tab implements IGuiComponent {
 		int row = 0;
 
 		row = addRow("Name", nameLabel, grid, row);
+		row = addRow("Tmp name", tmpNameLabel, grid, row);
+		row = addRow("Mapped name", mappedNameLabel, grid, row);
+		row = addRow("UID", uidLabel, grid, row);
+		row = addRow("Name obf.", nameObfLabel, grid, row);
 		row = addRow("Access", accessLabel, grid, row);
 		row = addRow("Signature", sigLabel, grid, row);
-		row = addRow("Outer Class", outerLabel, grid, row);
-		row = addRow("Super Class", superLabel, grid, row);
-		row = addRow("Sub Classes", subLabel, grid, row);
+		row = addRow("Outer class", outerLabel, grid, row);
+		row = addRow("Super class", superLabel, grid, row);
+		row = addRow("Sub classes", subLabel, grid, row);
 		row = addRow("Interfaces", ifaceLabel, grid, row);
 		row = addRow("Implementers", implLabel, grid, row);
-		row = addRow("Ref. Methods", refMethodLabel, grid, row);
-		row = addRow("Ref. Fields", refFieldLabel, grid, row);
+		row = addRow("Ref. methods", refMethodLabel, grid, row);
+		row = addRow("Ref. fields", refFieldLabel, grid, row);
 		row = addRow("Comment", mapCommentLabel, grid, row);
 
 		setContent(grid);
@@ -72,9 +77,18 @@ public class ClassInfoTab extends Tab implements IGuiComponent {
 		update(cls);
 	}
 
+	@Override
+	public void onViewChange() {
+		update(selectionProvider.getSelectedClass());
+	}
+
 	private void update(ClassInstance cls) {
 		if (cls == null) {
 			nameLabel.setText("-");
+			tmpNameLabel.setText("-");
+			mappedNameLabel.setText("-");
+			uidLabel.setText("-");
+			nameObfLabel.setText("-");
 			accessLabel.setText("-");
 			sigLabel.setText("-");
 			outerLabel.setText("-");
@@ -86,11 +100,20 @@ public class ClassInfoTab extends Tab implements IGuiComponent {
 			refFieldLabel.setText("-");
 			mapCommentLabel.setText("-");
 		} else {
-			nameLabel.setText(getName(cls));
+			nameLabel.setText(cls.getName());
+			tmpNameLabel.setText(nullToMissing(cls.getTmpName(unmatchedTmp)));
+			mappedNameLabel.setText(nullToMissing(cls.getMappedName()));
+			uidLabel.setText(cls.getUid() < 0 ? "-" : Integer.toString(cls.getUid()));
+			nameObfLabel.setText(Boolean.toString(cls.isNameObfuscated()));
 			accessLabel.setText(Util.formatAccessFlags(cls.getAccess(), AFElementType.Class));
 
-			ClassNode asmNode = cls.getMergedAsmNode();
-			sigLabel.setText(asmNode == null || asmNode.signature == null ? "-" : asmNode.signature);
+			if (cls.getSignature() == null) {
+				sigLabel.setText("-");
+			} else {
+				String sig = cls.getSignature().toString(false, gui.isTmpNamed(), unmatchedTmp);
+				String sigMapped = cls.getSignature().toString(true, gui.isTmpNamed(), unmatchedTmp);
+				sigLabel.setText(sig.equals(sigMapped) ? sig : sig+" - "+sigMapped);
+			}
 
 			outerLabel.setText(cls.getOuterClass() != null ? getName(cls.getOuterClass()) : "-");
 			superLabel.setText(cls.getSuperClass() != null ? getName(cls.getSuperClass()) : "-");
@@ -99,17 +122,25 @@ public class ClassInfoTab extends Tab implements IGuiComponent {
 			implLabel.setText(cls.isInterface() ? format(cls.getImplementers()) : "-");
 			refMethodLabel.setText(format(cls.getMethodTypeRefs()));
 			refFieldLabel.setText(format(cls.getFieldTypeRefs()));
-			mapCommentLabel.setText(cls.getMappedComment() != null ? cls.getMappedComment() : "-");
+			mapCommentLabel.setText(nullToMissing(cls.getMappedComment()));
 		}
 	}
 
-	static String format(Collection<? extends IMatchable<?>> c) {
-		return c.stream().map(ClassInfoTab::getName).sorted().collect(Collectors.joining("\n"));
+	private String format(Collection<? extends IMatchable<?>> c) {
+		return format(c, gui.isTmpNamed(), unmatchedTmp);
 	}
 
-	static String getName(IMatchable<?> c) {
-		String ret = c.getDisplayName(true, false);
-		String mapped = c.getDisplayName(true, true);
+	private String getName(IMatchable<?> m) {
+		return getName(m, gui.isTmpNamed(), unmatchedTmp);
+	}
+
+	static String format(Collection<? extends IMatchable<?>> c, boolean tmpNamed, boolean unmatchedTmp) {
+		return c.stream().map(v -> getName(v, tmpNamed, unmatchedTmp)).sorted().collect(Collectors.joining("\n"));
+	}
+
+	static String getName(IMatchable<?> m, boolean tmpNamed, boolean unmatchedTmp) {
+		String ret = m.getDisplayName(true, false, tmpNamed, unmatchedTmp);
+		String mapped = m.getDisplayName(true, true, tmpNamed, unmatchedTmp);
 
 		if (Objects.equals(ret, mapped)) {
 			return ret;
@@ -118,9 +149,19 @@ public class ClassInfoTab extends Tab implements IGuiComponent {
 		}
 	}
 
+	static String nullToMissing(String s) {
+		return s != null ? s : "-";
+	}
+
+	private final Gui gui;
 	private final ISelectionProvider selectionProvider;
+	private final boolean unmatchedTmp;
 
 	private final Label nameLabel = new Label();
+	private final Label tmpNameLabel = new Label();
+	private final Label mappedNameLabel = new Label();
+	private final Label uidLabel = new Label();
+	private final Label nameObfLabel = new Label();
 	private final Label accessLabel = new Label();
 	private final Label sigLabel = new Label();
 	private final Label outerLabel = new Label();

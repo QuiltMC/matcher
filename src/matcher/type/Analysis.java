@@ -55,11 +55,7 @@ class Analysis {
 		MethodNode asmNode = method.getAsmNode();
 		if (asmNode == null || (asmNode.access & Opcodes.ACC_ABSTRACT) != 0 || asmNode.instructions.size() == 0) return;
 
-		if (method.getDisplayName(true, false).equals("yp.c()V")) {
-			System.out.println();
-		}
-
-		System.out.println(method.getDisplayName(true, false));
+		System.out.println(method.getDisplayName(true, false, false, true));
 		dump(asmNode);
 
 		StateRecorder rec = new StateRecorder(method, common);
@@ -742,7 +738,7 @@ class Analysis {
 		createLocalVariables(il, rec, entryPoints, exitPoints, asmNode.localVariables);
 	}
 
-	private static void handleMethodInvocation(IClassEnv env, String owner, String name, String desc, boolean itf, boolean isStatic, StateRecorder rec) {
+	private static void handleMethodInvocation(ClassEnv env, String owner, String name, String desc, boolean itf, boolean isStatic, StateRecorder rec) {
 		MethodInstance target = env.getClsByName(owner).resolveMethod(name, desc, itf);
 
 		for (int i = target.args.length - 1; i >= 0; i--) {
@@ -1291,7 +1287,7 @@ class Analysis {
 	}
 
 	public static class CommonClasses {
-		CommonClasses(IClassEnv env) {
+		CommonClasses(ClassEnv env) {
 			this.INT = env.getCreateClassInstance("I");
 			this.LONG = env.getCreateClassInstance("J");
 			this.BOOLEAN = env.getCreateClassInstance("Z");

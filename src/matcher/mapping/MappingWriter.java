@@ -1,4 +1,4 @@
-package matcher.serdes.mapping;
+package matcher.mapping;
 
 import java.io.BufferedWriter;
 import java.io.Closeable;
@@ -12,8 +12,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.zip.GZIPOutputStream;
 
+import matcher.NameType;
+
 public class MappingWriter implements IMappingAcceptor, Closeable {
-	public MappingWriter(Path file, MappingFormat format) throws IOException {
+	public MappingWriter(Path file, MappingFormat format, NameType srcType, NameType dstType) throws IOException {
 		this.format = format;
 
 		switch (format) {
@@ -35,7 +37,21 @@ public class MappingWriter implements IMappingAcceptor, Closeable {
 		}
 
 		if (format == MappingFormat.TINY || format == MappingFormat.TINY_GZIP) {
-			writer.write("v1\tmojang\tpomf\n");
+			writer.write("v1\t");
+			writer.write(getTinyNameType(srcType));
+			writer.write('\t');
+			writer.write(getTinyNameType(dstType));
+			writer.write('\n');
+		}
+	}
+
+	private static String getTinyNameType(NameType type) {
+		switch (type) {
+		case MAPPED: return "pomf";
+		case PLAIN: return "official";
+		case TMP: return "tmp";
+		case UID: return "intermediary";
+		default: throw new IllegalArgumentException();
 		}
 	}
 
@@ -168,7 +184,7 @@ public class MappingWriter implements IMappingAcceptor, Closeable {
 	}
 
 	@Override
-	public void acceptMethodArg(String srcClsName, String srcName, String srcDesc, int argIndex, int lvtIndex, String dstArgName) {
+	public void acceptMethodArg(String srcClsName, String srcName, String srcDesc, int argIndex, int lvIndex, String dstArgName) {
 		try {
 			switch (format) {
 			case TINY:
@@ -189,7 +205,37 @@ public class MappingWriter implements IMappingAcceptor, Closeable {
 				// not supported
 				break;
 			case ENIGMA:
-				enigmaState.acceptMethodArg(srcClsName, srcName, srcDesc, argIndex, lvtIndex, dstArgName);
+				enigmaState.acceptMethodArg(srcClsName, srcName, srcDesc, argIndex, lvIndex, dstArgName);
+				break;
+			}
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	@Override
+	public void acceptMethodVar(String srcClsName, String srcName, String srcDesc, int varIndex, int lvIndex, String dstVarName) {
+		try {
+			switch (format) {
+			case TINY:
+			case TINY_GZIP:
+				writer.write("MTH-VAR\t");
+				writer.write(srcClsName);
+				writer.write('\t');
+				writer.write(srcDesc);
+				writer.write('\t');
+				writer.write(srcName);
+				writer.write('\t');
+				writer.write(Integer.toString(varIndex));
+				writer.write('\t');
+				writer.write(dstVarName);
+				writer.write('\n');
+				break;
+			case SRG:
+				// not supported
+				break;
+			case ENIGMA:
+				enigmaState.acceptMethodVar(srcClsName, srcName, srcDesc, varIndex, lvIndex, dstVarName);
 				break;
 			}
 		} catch (IOException e) {

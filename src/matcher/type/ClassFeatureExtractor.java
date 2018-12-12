@@ -6,13 +6,16 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Handle;
@@ -29,19 +32,20 @@ import matcher.bcremap.AsmClassRemapper;
 import matcher.bcremap.AsmRemapper;
 import matcher.type.Analysis.CommonClasses;
 
-public class ClassFeatureExtractor implements IClassEnv {
+public class ClassFeatureExtractor implements LocalClassEnv {
 	public ClassFeatureExtractor(ClassEnvironment env) {
 		this.env = env;
 	}
 
-	public void processInputs(Collection<Path> inputs) {
+	public void processInputs(Collection<Path> inputs, Pattern nonObfuscatedClasses) {
 		Set<Path> uniqueInputs = new LinkedHashSet<>(inputs);
+		Predicate<ClassNode> obfuscatedCheck = cn -> isNameObfuscated(cn, nonObfuscatedClasses);
 
 		for (Path archive : uniqueInputs) {
 			inputFiles.add(new InputFile(archive));
 
 			Util.iterateJar(archive, true, file -> {
-				ClassInstance cls = readClass(file, ClassFeatureExtractor::isNameObfuscated);
+				ClassInstance cls = readClass(file, obfuscatedCheck);
 				String id = cls.getId();
 				String name = cls.getName();
 
@@ -79,8 +83,8 @@ public class ClassFeatureExtractor implements IClassEnv {
 		}
 	}
 
-	private static boolean isNameObfuscated(ClassNode cn) {
-		return true;
+	private static boolean isNameObfuscated(ClassNode cn, Pattern pattern) {
+		return pattern == null || !pattern.matcher(cn.name).matches();
 	}
 
 	private ClassInstance readClass(Path path, Predicate<ClassNode> nameObfuscated) {
@@ -95,7 +99,7 @@ public class ClassFeatureExtractor implements IClassEnv {
 		to.addAsmNode(from.getAsmNodes()[0]);
 	}
 
-	public void process() {
+	public void process(Pattern nonObfuscatedMemberPattern) {
 		ClassInstance clo = getCreateClassInstance("Ljava/lang/Object;");
 		assert clo != null && clo.getAsmNodes() != null;
 
@@ -103,12 +107,13 @@ public class ClassFeatureExtractor implements IClassEnv {
 		List<ClassInstance> initialClasses = new ArrayList<>(classes.values());
 
 		for (ClassInstance cls : initialClasses) {
-			ClassEnvironment.processClassA(cls);
+			ClassEnvironment.processClassA(cls, nonObfuscatedMemberPattern);
 		}
 
 		initStep++;
 		initialClasses.clear();
 		initialClasses.addAll(classes.values());
+		assert initialClasses.size() == new HashSet<>(initialClasses).size();
 
 		for (ClassInstance cls : initialClasses) {
 			processClassB(cls);
@@ -133,6 +138,19 @@ public class ClassFeatureExtractor implements IClassEnv {
 		}
 
 		initStep++;
+
+		int clsIdx = 0;
+		AtomicInteger vmIdx = new AtomicInteger();
+
+		for (ClassInstance cls : initialClasses) {
+			if (cls.getUri() == null || !cls.isInput()) continue;
+
+			int curClsIdx = cls.nameObfuscated ? clsIdx++ : -1;
+
+			processClassE(cls, curClsIdx, vmIdx);
+		}
+
+		initStep++;
 	}
 
 	public void reset() {
@@ -143,8 +161,9 @@ public class ClassFeatureExtractor implements IClassEnv {
 		arrayClasses.clear();
 	}
 
-	public Map<String, ClassInstance> getClasses() {
-		return roClasses;
+	@Override
+	public Collection<ClassInstance> getClasses() {
+		return roClasses.values();
 	}
 
 	public Collection<InputFile> getInputFiles() {
@@ -257,6 +276,9 @@ public class ClassFeatureExtractor implements IClassEnv {
 		method.classRefs.add(dst.cls);
 	}
 
+	/**
+	 * 3rd processing pass, determine parent/child methods
+	 */
 	private static void processClassC(ClassInstance cls) {
 		Queue<ClassInstance> toCheck = new ArrayDeque<>();
 		Set<ClassInstance> checked = Util.newIdentityHashSet();
@@ -296,7 +318,7 @@ public class ClassFeatureExtractor implements IClassEnv {
 	}
 
 	/**
-	 * 3rd processing pass, in depth analysis.
+	 * 4th processing pass, hierarchy and in depth analysis.
 	 */
 	private void processClassD(ClassInstance cls, CommonClasses common) {
 		Queue<MethodInstance> toCheck = new ArrayDeque<>();
@@ -357,6 +379,56 @@ public class ClassFeatureExtractor implements IClassEnv {
 		}
 	}
 
+	/**
+	 * 5th processing pass, assign temporary names.
+	 */
+	private void processClassE(ClassInstance cls, int clsIndex, AtomicInteger vmIdx) {
+		/* Assign each class+member a contextually unique name in the form <type><env><id>
+		 * where <type> is c for class, m for method, vm for virtual method and f for field,
+		 * <env> is a for envA and b for envB and <id> is an integer id.
+		 *
+		 * The purpose is to make it easy to tell if a referenced class/member on side B is the
+		 * same as on side A if it is already matched. It also avoids name conflicts from
+		 * overwriting identifiers in side B with the matched non-namespaced names of side A.*/
+
+		String envName = this == env.getEnvA() ? "a" : "b";
+
+		if (cls.isNameObfuscated()) {
+			assert clsIndex >= 0;
+			cls.setTmpName("c"+envName+clsIndex);
+		}
+
+		int memberIndex = 0;
+
+		for (MethodInstance method : cls.getMethods()) {
+			if (!method.isNameObfuscated()) continue;
+
+			assert !method.getName().equals("<init>") && !method.getName().equals("<clinit>");
+
+			if (method.getAllHierarchyMembers().size() == 1) {
+				method.setTmpName("m"+envName+memberIndex);
+				memberIndex++;
+			} else if (method.getTmpName(true) == null) {
+				String name = "vm"+envName+vmIdx.getAndIncrement();
+
+				for (MethodInstance m : method.getAllHierarchyMembers()) {
+					m.setTmpName(name);
+				}
+			}
+		}
+
+		memberIndex = 0;
+
+		for (FieldInstance field : cls.getFields()) {
+			if (!field.isNameObfuscated()) continue;
+
+			assert field.getAllHierarchyMembers().size() == 1;
+
+			field.setTmpName("f"+envName+memberIndex);
+			memberIndex++;
+		}
+	}
+
 	@Override
 	public boolean isShared() {
 		return false;
@@ -387,8 +459,8 @@ public class ClassFeatureExtractor implements IClassEnv {
 	}
 
 	@Override
-	public ClassInstance getClsByMappedId(String id) {
-		if (id.charAt(id.length() - 1) == ';') { // no local primitives or primitive arrays
+	public ClassInstance getClsById(String id, boolean mapped, boolean tmpNamed, boolean unmatchedTmp) {
+		if ((mapped || tmpNamed) && id.charAt(id.length() - 1) == ';') { // no local primitives or primitive arrays
 			if (id.charAt(0) == '[') {
 				int start = 1;
 				while (id.charAt(start) == '[') start++;
@@ -397,8 +469,7 @@ public class ClassFeatureExtractor implements IClassEnv {
 				int reqNameLen = id.length() - 2 - start;
 
 				for (ClassInstance cls : arrayClasses.values()) {
-					String name = cls.getMappedName(false);
-					if (name == null) continue;
+					String name = cls.getName(mapped, tmpNamed, unmatchedTmp);
 					if (name.length() != reqNameLen) continue;
 
 					if (id.startsWith(name, start + 1)) return cls;
@@ -408,8 +479,7 @@ public class ClassFeatureExtractor implements IClassEnv {
 				int reqNameLen = id.length() - 2;
 
 				for (ClassInstance cls : classes.values()) {
-					String name = cls.getMappedName(false);
-					if (name == null) continue;
+					String name = cls.getName(mapped, tmpNamed, unmatchedTmp);
 					if (name.length() != reqNameLen) continue;
 
 					if (id.startsWith(name, 1)) return cls;
@@ -470,7 +540,7 @@ public class ClassFeatureExtractor implements IClassEnv {
 		ClassInstance prev = classes.putIfAbsent(cls.getId(), cls);
 		assert prev == null;
 
-		if (initStep > 0) ClassEnvironment.processClassA(cls);
+		if (initStep > 0) ClassEnvironment.processClassA(cls, null);
 		if (initStep > 1) processClassB(cls);
 		if (initStep > 2) processClassC(cls);
 		if (initStep > 3) processClassD(cls, new CommonClasses(this));
@@ -483,15 +553,15 @@ public class ClassFeatureExtractor implements IClassEnv {
 		return env;
 	}
 
-	public byte[] serializeClass(ClassInstance cls, boolean mapped) {
+	public byte[] serializeClass(ClassInstance cls, boolean mapped, boolean tmpNamed, boolean unmatchedTmp) {
 		ClassNode cn = cls.getMergedAsmNode();
 		if (cn == null) throw new IllegalArgumentException("cls without asm node: "+cls);
 
 		ClassWriter writer = new ClassWriter(0);
 
 		synchronized (Util.asmNodeSync) {
-			if (mapped) {
-				AsmClassRemapper.process(cn, remapper, writer);
+			if (mapped || tmpNamed) {
+				AsmClassRemapper.process(cn, new AsmRemapper(this, mapped, tmpNamed, unmatchedTmp), writer);
 			} else {
 				cn.accept(writer);
 			}
@@ -501,7 +571,6 @@ public class ClassFeatureExtractor implements IClassEnv {
 	}
 
 	final ClassEnvironment env;
-	final AsmRemapper remapper = new AsmRemapper(this);
 	private final List<InputFile> inputFiles = new ArrayList<>();
 	private final List<InputFile> cpFiles = new ArrayList<>();
 	private final Map<String, Path> classPathIndex = new HashMap<>();

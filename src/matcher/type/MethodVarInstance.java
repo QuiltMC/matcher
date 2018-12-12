@@ -1,13 +1,13 @@
 package matcher.type;
 
 public class MethodVarInstance implements IMatchable<MethodVarInstance> {
-	MethodVarInstance(MethodInstance method, boolean isArg, int index, int lvtIndex, int asmIndex,
+	MethodVarInstance(MethodInstance method, boolean isArg, int index, int lvIndex, int asmIndex,
 			ClassInstance type, int startInsn, int endInsn,
 			String origName, boolean nameObfuscated) {
 		this.method = method;
 		this.isArg = isArg;
 		this.index = index;
-		this.lvtIndex = lvtIndex;
+		this.lvIndex = lvIndex;
 		this.asmIndex = asmIndex;
 		this.type = type;
 		this.startInsn = startInsn;
@@ -28,8 +28,8 @@ public class MethodVarInstance implements IMatchable<MethodVarInstance> {
 		return index;
 	}
 
-	public int getLvtIndex() {
-		return lvtIndex;
+	public int getLvIndex() {
+		return lvIndex;
 	}
 
 	public int getAsmIndex() {
@@ -59,27 +59,46 @@ public class MethodVarInstance implements IMatchable<MethodVarInstance> {
 	}
 
 	@Override
-	public IClassEnv getEnv() {
+	public ClassEnv getEnv() {
 		return method.getEnv();
 	}
 
 	@Override
-	public boolean isNameObfuscated(boolean recursive) {
-		if (!recursive) {
-			return nameObfuscated;
-		} else {
-			return nameObfuscated || method.isNameObfuscated(true);
-		}
+	public boolean isNameObfuscated() {
+		return nameObfuscated;
 	}
 
 	@Override
-	public String getMappedName(boolean defaultToUnmapped) {
+	public String getTmpName(boolean unmatched) {
+		String ret;
+
+		if (!unmatched && matchedInstance != null && (ret = matchedInstance.getTmpName(true)) != null) {
+			return ret;
+		}
+
+		return tmpName;
+	}
+
+	public void setTmpName(String tmpName) {
+		this.tmpName = tmpName;
+	}
+
+	@Override
+	public int getUid() {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public String getUidString() {
+		throw new UnsupportedOperationException();
+	}
+
+	@Override
+	public String getMappedName() {
 		if (mappedName != null) {
 			return mappedName;
 		} else if (matchedInstance != null && matchedInstance.mappedName != null) {
 			return matchedInstance.mappedName;
-		} else if (defaultToUnmapped) {
-			return getName();
 		} else {
 			return null;
 		}
@@ -108,7 +127,7 @@ public class MethodVarInstance implements IMatchable<MethodVarInstance> {
 	final MethodInstance method;
 	final boolean isArg;
 	final int index;
-	final int lvtIndex;
+	final int lvIndex;
 	final int asmIndex;
 	final ClassInstance type;
 	final int startInsn; // inclusive
@@ -116,6 +135,8 @@ public class MethodVarInstance implements IMatchable<MethodVarInstance> {
 	final String origName;
 	final boolean nameObfuscated;
 
-	String mappedName;
-	MethodVarInstance matchedInstance;
+	private String tmpName;
+
+	private String mappedName;
+	private MethodVarInstance matchedInstance;
 }

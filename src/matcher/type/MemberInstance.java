@@ -1,6 +1,7 @@
 package matcher.type;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Set;
 
 import org.objectweb.asm.Opcodes;
@@ -26,6 +27,7 @@ public abstract class MemberInstance<T extends MemberInstance<T>> implements IMa
 		return cls;
 	}
 
+	@Override
 	public String getId() {
 		return id;
 	}
@@ -36,17 +38,11 @@ public abstract class MemberInstance<T extends MemberInstance<T>> implements IMa
 	}
 
 	@Override
-	public String getDisplayName(boolean full, boolean mapped) {
-		String name;
-
-		if (!mapped) {
-			name = getName();
-		} else {
-			name = getMappedName(true);
-		}
+	public String getDisplayName(boolean full, boolean mapped, boolean tmpNamed, boolean localOnly) {
+		String name = getName(mapped, tmpNamed, localOnly);
 
 		if (full) {
-			return cls.getDisplayName(full, mapped) + "." + name;
+			return cls.getDisplayName(full, mapped, tmpNamed, localOnly) + "." + name;
 		} else {
 			return name;
 		}
@@ -56,17 +52,13 @@ public abstract class MemberInstance<T extends MemberInstance<T>> implements IMa
 	public abstract boolean isReal();
 
 	@Override
-	public IClassEnv getEnv() {
+	public ClassEnv getEnv() {
 		return cls.getEnv();
 	}
 
 	@Override
-	public boolean isNameObfuscated(boolean recursive) {
-		if (!recursive) {
-			return nameObfuscated;
-		} else {
-			return nameObfuscated || cls.isNameObfuscated(true);
-		}
+	public boolean isNameObfuscated() {
+		return nameObfuscated;
 	}
 
 	public int getPosition() {
@@ -115,11 +107,11 @@ public abstract class MemberInstance<T extends MemberInstance<T>> implements IMa
 	public T getMatchedHierarchyMember() {
 		if (getMatch() != null) return (T) this;
 
-		IClassEnv reqEnv = cls.getEnv();
+		ClassEnv reqEnv = cls.getEnv();
 
 		for (T m : hierarchyMembers) {
 			if (m.getMatch() != null) {
-				IClassEnv env = m.cls.getEnv();
+				ClassEnv env = m.cls.getEnv();
 
 				if (env.isShared() || env == reqEnv) return m;
 			}
@@ -134,18 +126,50 @@ public abstract class MemberInstance<T extends MemberInstance<T>> implements IMa
 		return hierarchyMembers;
 	}
 
+	@Override
+	public String getTmpName(boolean unmatched) {
+		String ret;
+
+		if (!unmatched && matchedInstance != null && (ret = matchedInstance.getTmpName(true)) != null) {
+			return ret;
+		}
+
+		return tmpName;
+	}
+
+	public void setTmpName(String tmpName) {
+		this.tmpName = tmpName;
+	}
+
+	@Override
+	public int getUid() {
+		if (uid >= 0) {
+			if (matchedInstance != null && matchedInstance.uid >= 0) {
+				return Math.min(uid, matchedInstance.uid);
+			} else {
+				return uid;
+			}
+		} else if (matchedInstance != null) {
+			return matchedInstance.uid;
+		} else {
+			return -1;
+		}
+	}
+
+	public void setUid(int uid) {
+		this.uid = uid;
+	}
+
 	public boolean hasMappedName() {
 		return mappedName != null || matchedInstance != null && matchedInstance.mappedName != null;
 	}
 
 	@Override
-	public String getMappedName(boolean defaultToUnmapped) {
+	public String getMappedName() {
 		if (mappedName != null) {
 			return mappedName;
 		} else if (matchedInstance != null && matchedInstance.mappedName != null) {
 			return matchedInstance.mappedName;
-		} else if (defaultToUnmapped) {
-			return getName();
 		} else {
 			return null;
 		}
@@ -184,8 +208,10 @@ public abstract class MemberInstance<T extends MemberInstance<T>> implements IMa
 
 	@Override
 	public String toString() {
-		return getDisplayName(true, false);
+		return getDisplayName(true, false, false, true);
 	}
+
+	public static final Comparator<MemberInstance<?>> nameComparator = Comparator.<MemberInstance<?>, String>comparing(MemberInstance::getName).thenComparing(MemberInstance::getDesc);
 
 	final ClassInstance cls;
 	final String id;
@@ -197,6 +223,9 @@ public abstract class MemberInstance<T extends MemberInstance<T>> implements IMa
 	private Set<T> parents = Collections.emptySet();
 	private Set<T> children = Collections.emptySet();
 	Set<T> hierarchyMembers;
+
+	private String tmpName;
+	int uid = -1;
 
 	String mappedName;
 	String mappedComment;
