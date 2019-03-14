@@ -47,10 +47,15 @@ public class MappingWriter implements IMappingAcceptor, Closeable {
 
 	private static String getTinyNameType(NameType type) {
 		switch (type) {
-		case MAPPED: return "pomf";
+		case MAPPED_PLAIN: return "pomf";
 		case PLAIN: return "official";
-		case TMP: return "tmp";
-		case UID: return "intermediary";
+		case LOCTMP_PLAIN:
+		case TMP_PLAIN:
+			return "tmp";
+		case UID_PLAIN: return "intermediary";
+		case MAPPED_LOCTMP_PLAIN:
+		case MAPPED_TMP_PLAIN:
+			return "pomf-tmp";
 		default: throw new IllegalArgumentException();
 		}
 	}
@@ -304,6 +309,39 @@ public class MappingWriter implements IMappingAcceptor, Closeable {
 				break;
 			case ENIGMA:
 				enigmaState.acceptFieldComment(srcClsName, srcName, srcDesc, comment);
+				break;
+			}
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	@Override
+	public void acceptMeta(String key, String value) {
+		try {
+			switch (format) {
+			case TINY:
+			case TINY_GZIP:
+				switch (key) {
+				case Mappings.metaUidNextClass:
+				case Mappings.metaUidNextMethod:
+				case Mappings.metaUidNextField:
+					writer.write("# INTERMEDIARY-COUNTER ");
+					writer.write(key.equals(Mappings.metaUidNextClass) ? "class" : (key.equals(Mappings.metaUidNextMethod) ? "method" : "field"));
+					writer.write(' ');
+					writer.write(value);
+					writer.write('\n');
+					break;
+				default:
+					// not supported
+				}
+				break;
+			case MCP:
+			case SRG:
+				// not supported
+				break;
+			case ENIGMA:
+				enigmaState.acceptMeta(key, value);
 				break;
 			}
 		} catch (IOException e) {

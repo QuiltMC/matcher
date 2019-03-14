@@ -25,7 +25,7 @@ import matcher.type.ClassEnv;
 import matcher.type.ClassEnvironment;
 import matcher.type.ClassInstance;
 import matcher.type.FieldInstance;
-import matcher.type.IMatchable;
+import matcher.type.Matchable;
 import matcher.type.MatchType;
 import matcher.type.MemberInstance;
 import matcher.type.MethodInstance;
@@ -200,7 +200,7 @@ public class UidMenu extends Menu {
 			conn.setRequestProperty("X-Token", config.getToken());
 			conn.setDoOutput(true);
 
-			List<IMatchable<?>> requested = new ArrayList<>();
+			List<Matchable<?>> requested = new ArrayList<>();
 
 			try (DataOutputStream os = new DataOutputStream(conn.getOutputStream())) {
 				for (ClassInstance cls : gui.getEnv().getClassesA()) {
@@ -248,7 +248,7 @@ public class UidMenu extends Menu {
 			progressConsumer.accept(0.5);
 
 			try (DataInputStream is = new DataInputStream(conn.getInputStream())) {
-				for (IMatchable<?> matchable : requested) {
+				for (Matchable<?> matchable : requested) {
 					int uid = is.readInt();
 				}
 			}
@@ -260,12 +260,13 @@ public class UidMenu extends Menu {
 	}
 
 	private void assignMissing() {
-		// TOOD: these need to be managed globally, uids need to be unique across all versions
-		int nextClassId = 0;
-		int nextMethodId = 0;
-		int nextFieldId = 0;
+		ClassEnvironment env = gui.getEnv();
 
-		List<ClassInstance> classes = new ArrayList<>(gui.getEnv().getClassesB());
+		int nextClassUid = env.nextClassUid;
+		int nextMethodUid = env.nextMethodUid;
+		int nextFieldUid = env.nextFieldUid;
+
+		List<ClassInstance> classes = new ArrayList<>(env.getClassesB());
 		classes.sort(ClassInstance.nameComparator);
 
 		List<MethodInstance> methods = new ArrayList<>();
@@ -275,7 +276,7 @@ public class UidMenu extends Menu {
 			assert cls.isInput();
 
 			if (cls.isNameObfuscated() && cls.getUid() < 0) {
-				cls.setUid(nextClassId++);
+				cls.setUid(nextClassUid++);
 			}
 
 			for (MethodInstance method : cls.getMethods()) {
@@ -288,7 +289,7 @@ public class UidMenu extends Menu {
 				methods.sort(MemberInstance.nameComparator);
 
 				for (MethodInstance method : methods) {
-					int uid = nextMethodId++;
+					int uid = nextMethodUid++;
 
 					for (MethodInstance m : method.getAllHierarchyMembers()) {
 						m.setUid(uid);
@@ -308,13 +309,22 @@ public class UidMenu extends Menu {
 				fields.sort(MemberInstance.nameComparator);
 
 				for (FieldInstance field : cls.getFields()) {
-					field.setUid(nextFieldId++);
+					field.setUid(nextFieldUid++);
 					assert field.getAllHierarchyMembers().size() == 1;
 				}
 
 				fields.clear();
 			}
 		}
+
+		System.out.printf("uids assigned: %d class, %d method, %d field%n",
+				nextClassUid - env.nextClassUid,
+				nextMethodUid - env.nextMethodUid,
+				nextFieldUid - env.nextFieldUid);
+
+		env.nextClassUid = nextClassUid;
+		env.nextMethodUid = nextMethodUid;
+		env.nextFieldUid = nextFieldUid;
 	}
 
 	private static final byte TYPE_CLASS = 0;

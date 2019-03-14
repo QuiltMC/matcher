@@ -13,10 +13,12 @@ import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.LocalVariableNode;
 import org.objectweb.asm.tree.MethodNode;
 
+import matcher.NameType;
 import matcher.Util;
+import matcher.classifier.ClassifierUtil;
 import matcher.type.Signature.MethodSignature;
 
-public class MethodInstance extends MemberInstance<MethodInstance> {
+public final class MethodInstance extends MemberInstance<MethodInstance> {
 	/**
 	 * Create a shared unknown method.
 	 */
@@ -129,8 +131,13 @@ public class MethodInstance extends MemberInstance<MethodInstance> {
 			assert var.name != null;
 			assert method.args.length == 0 || var.index > method.args[method.args.length - 1].lvIndex;
 
+			int startInsn = il.indexOf(var.start);
+			int endInsn = il.indexOf(var.end);
+
+			assert startInsn >= 0 && endInsn >= 0;
+
 			ret[i] = new MethodVarInstance(method, false, i, var.index, asmNode.localVariables.indexOf(var),
-					method.getEnv().getCreateClassInstance(var.desc), il.indexOf(var.start), il.indexOf(var.end),
+					method.getEnv().getCreateClassInstance(var.desc), startInsn, endInsn,
 					var.name, method.nameObfuscated || method.cls.nameObfuscated);
 		}
 
@@ -138,9 +145,9 @@ public class MethodInstance extends MemberInstance<MethodInstance> {
 	}
 
 	@Override
-	public String getDisplayName(boolean full, boolean mapped, boolean tmpNamed, boolean unmatchedTmp) {
+	public String getDisplayName(NameType type, boolean full) {
 		StringBuilder ret = new StringBuilder(64);
-		ret.append(super.getDisplayName(full, mapped, tmpNamed, unmatchedTmp));
+		ret.append(super.getDisplayName(type, full));
 		ret.append('(');
 		boolean first = true;
 
@@ -151,11 +158,11 @@ public class MethodInstance extends MemberInstance<MethodInstance> {
 				ret.append(", ");
 			}
 
-			ret.append(arg.getType().getDisplayName(full, mapped, tmpNamed, unmatchedTmp));
+			ret.append(arg.getType().getDisplayName(type, full));
 		}
 
 		ret.append(')');
-		ret.append(retType.getDisplayName(full, mapped, tmpNamed, unmatchedTmp));
+		ret.append(retType.getDisplayName(type, full));
 
 		return ret.toString();
 	}
@@ -206,6 +213,50 @@ public class MethodInstance extends MemberInstance<MethodInstance> {
 		return isArg ? getArg(id) : getVar(id);
 	}
 
+	public MethodVarInstance getArgOrVar(int lvIndex, int pos) {
+		return getArgOrVar(lvIndex, pos, pos + 1);
+	}
+
+	public MethodVarInstance getArgOrVar(int lvIndex, int start, int end) {
+		if (args.length > 0 && lvIndex <= args[args.length - 1].getLvIndex()) {
+			for (int i = 0; i < args.length; i++) {
+				MethodVarInstance arg = args[i];
+
+				if (arg.getLvIndex() == lvIndex) {
+					assert arg.getStartInsn() < 0
+					|| start < arg.getEndInsn() && end > arg.getStartInsn()
+					|| arg.getStartInsn() < end && arg.getEndInsn() > start;
+
+					return arg;
+				}
+			}
+		} else {
+			MethodVarInstance candidate = null;
+			boolean conflict = false;
+
+			for (int i = 0; i < vars.length; i++) {
+				MethodVarInstance var = vars[i];
+				if (var.getLvIndex() != lvIndex) continue;
+
+				if (start < var.getEndInsn() && end > var.getStartInsn()) { // requested interval within var interval (assumes matcher's interval never too loose)
+					return var;
+				} else if (var.getStartInsn() < end && var.getEndInsn() > start) { // var interval within requested interval, only allow unique match
+					if (candidate != null) {
+						conflict = true;
+					} else {
+						candidate = var;
+					}
+				}
+			}
+
+			if (candidate != null && !conflict) {
+				return candidate;
+			}
+		}
+
+		return null;
+	}
+
 	public MethodVarInstance[] getArgs() {
 		return args;
 	}
@@ -214,17 +265,9 @@ public class MethodInstance extends MemberInstance<MethodInstance> {
 		return vars;
 	}
 
-	public boolean hasMappedArg() {
-		for (MethodVarInstance arg : args) {
-			if (arg.getMappedName() != null) return true;
-		}
-
-		return false;
-	}
-
 	public boolean hasAllArgsMapped() {
 		for (MethodVarInstance arg : args) {
-			if (arg.getMappedName() == null) return false;
+			if (!arg.hasMappedName()) return false;
 		}
 
 		return true;
@@ -275,7 +318,57 @@ public class MethodInstance extends MemberInstance<MethodInstance> {
 		int uid = getUid();
 		if (uid < 0) return null;
 
-		return "method_"+uid;
+		return cls.env.getGlobal().methodUidPrefix+uid;
+	}
+
+	@Override
+	public boolean isFullyMatched(boolean recursive) {
+		if (matchedInstance == null) return false;
+
+		boolean anyUnmatched = false;
+
+		for (MethodVarInstance v : args) {
+			if (!v.hasMatch()) {
+				anyUnmatched = true;
+				break;
+			}
+		}
+
+		if (anyUnmatched) {
+			for (MethodVarInstance a : args) {
+				if (a.hasMatch()) continue;
+
+				// check for any potential match to ignore methods that are impossible to match
+				for (MethodVarInstance b : matchedInstance.args) {
+					if (!b.hasMatch() && ClassifierUtil.checkPotentialEquality(a, b)) {
+						return false;
+					}
+				}
+			}
+		}
+
+		anyUnmatched = false;
+
+		for (MethodVarInstance v : vars) {
+			if (!v.hasMatch()) {
+				anyUnmatched = true;
+				break;
+			}
+		}
+
+		if (anyUnmatched) {
+			for (MethodVarInstance a : vars) {
+				if (a.hasMatch()) continue;
+
+				for (MethodVarInstance b : matchedInstance.vars) {
+					if (!b.hasMatch() && ClassifierUtil.checkPotentialEquality(a, b)) {
+						return false;
+					}
+				}
+			}
+		}
+
+		return true;
 	}
 
 	static String getId(String name, String desc) {

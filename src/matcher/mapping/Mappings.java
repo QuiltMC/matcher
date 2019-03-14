@@ -14,14 +14,13 @@ import matcher.Util;
 import matcher.type.ClassEnv;
 import matcher.type.ClassInstance;
 import matcher.type.FieldInstance;
-import matcher.type.IMatchable;
 import matcher.type.LocalClassEnv;
 import matcher.type.MemberInstance;
 import matcher.type.MethodInstance;
 import matcher.type.MethodVarInstance;
 
 public class Mappings {
-	public static void load(Path path, MappingFormat format, LocalClassEnv env, final boolean replace) throws IOException {
+	public static void load(Path path, MappingFormat format, LocalClassEnv env, final boolean isNames, final boolean replace) throws IOException {
 		int[] counts = new int[7];
 		Set<String> warnedClasses = new HashSet<>();
 
@@ -34,7 +33,42 @@ public class Mappings {
 					if (cls == null) {
 						if (warnedClasses.add(srcName)) System.out.println("can't find mapped class "+srcName+" ("+dstName+")");
 					} else {
-						if (!cls.hasMappedName() || replace) cls.setMappedName(dstName);
+						if (isNames) {
+							if (!cls.hasMappedName() || replace) cls.setMappedName(dstName);
+						} else {
+							String prefix = env.getGlobal().classUidPrefix;
+
+							if (!dstName.startsWith(prefix)) {
+								System.out.println("Invalid uid class name "+dstName);
+								return;
+							} else {
+								int lastPartStart = dstName.lastIndexOf('$') + 1;
+								String uidStr;
+
+								if (lastPartStart > prefix.length()) {
+									int subPrefixStart = prefix.lastIndexOf('/') + 1;
+
+									if (!dstName.startsWith(prefix.substring(subPrefixStart), lastPartStart)) {
+										System.out.println("Invalid uid class name "+dstName);
+										return;
+									} else {
+										uidStr = dstName.substring(lastPartStart + prefix.length() - subPrefixStart);
+									}
+								} else {
+									uidStr = dstName.substring(prefix.length());
+								}
+
+								int uid = Integer.parseInt(uidStr);
+
+								if (uid < 0) {
+									System.out.println("Invalid class uid "+uid);
+									return;
+								} else if (cls.getUid() < 0 || cls.getUid() > uid || replace) {
+									cls.setUid(uid);
+								}
+							}
+						}
+
 						counts[0]++;
 					}
 				}
@@ -59,10 +93,34 @@ public class Mappings {
 					if (cls == null) {
 						if (warnedClasses.add(srcClsName)) System.out.println("can't find mapped class "+srcClsName);
 					} else if ((method = cls.getMethod(srcName, srcDesc)) == null || !method.isReal()) {
-						String mappedName = cls.getMappedName();
-						System.out.println("can't find mapped method "+srcClsName+"/"+srcName+" ("+(mappedName != null ? mappedName+"/" : "")+dstName+")");
+						System.out.println("can't find mapped method "+srcClsName+"/"+srcName+" ("+(cls.hasMappedName() ? cls.getName(NameType.MAPPED_PLAIN)+"/" : "")+dstName+")");
 					} else {
-						if (!method.hasMappedName() || replace) method.setMappedName(dstName);
+						if (isNames) {
+							if (!method.hasMappedName() || replace) {
+								for (MethodInstance m : method.getAllHierarchyMembers()) {
+									m.setMappedName(dstName);
+								}
+							}
+						} else {
+							String prefix = env.getGlobal().methodUidPrefix;
+
+							if (!dstName.startsWith(prefix)) {
+								System.out.println("Invalid uid method name "+dstName);
+								return;
+							} else {
+								int uid = Integer.parseInt(dstName.substring(prefix.length()));
+
+								if (uid < 0) {
+									System.out.println("Invalid method uid "+uid);
+									return;
+								} else if (method.getUid() < 0 || method.getUid() > uid || replace) {
+									for (MethodInstance m : method.getAllHierarchyMembers()) {
+										m.setUid(uid);
+									}
+								}
+							}
+						}
+
 						counts[2]++;
 					}
 				}
@@ -117,7 +175,12 @@ public class Mappings {
 							return;
 						}
 
-						if (arg.getMappedName() == null || replace) arg.setMappedName(dstArgName);
+						if (isNames) {
+							if (!arg.hasMappedName() || replace) arg.setMappedName(dstArgName);
+						} else {
+							// not applicable
+						}
+
 						counts[4]++;
 					}
 				}
@@ -157,7 +220,12 @@ public class Mappings {
 							return;
 						}
 
-						if (arg.getMappedName() == null || replace) arg.setMappedName(dstVarName);
+						if (isNames) {
+							if (!arg.hasMappedName() || replace) arg.setMappedName(dstVarName);
+						} else {
+							// not applicable
+						}
+
 						counts[4]++;
 					}
 				}
@@ -170,10 +238,34 @@ public class Mappings {
 					if (cls == null) {
 						if (warnedClasses.add(srcClsName)) System.out.println("can't find mapped class "+srcClsName);
 					} else if ((field = cls.getField(srcName, srcDesc)) == null || !field.isReal()) {
-						String mappedName = cls.getMappedName();
-						System.out.println("can't find mapped field "+srcClsName+"/"+srcName+" ("+(mappedName != null ? mappedName+"/" : "")+dstName+")");
+						System.out.println("can't find mapped field "+srcClsName+"/"+srcName+" ("+(cls.hasMappedName() ? cls.getName(NameType.MAPPED_PLAIN)+"/" : "")+dstName+")");
 					} else {
-						if (!field.hasMappedName() || replace) field.setMappedName(dstName);
+						if (isNames) {
+							if (!field.hasMappedName() || replace) {
+								for (FieldInstance f : field.getAllHierarchyMembers()) {
+									f.setMappedName(dstName);
+								}
+							}
+						} else {
+							String prefix = env.getGlobal().fieldUidPrefix;
+
+							if (!dstName.startsWith(prefix)) {
+								System.out.println("Invalid uid field name "+dstName);
+								return;
+							} else {
+								int uid = Integer.parseInt(dstName.substring(prefix.length()));
+
+								if (uid < 0) {
+									System.out.println("Invalid field uid "+uid);
+									return;
+								} else if (field.getUid() < 0 || field.getUid() > uid || replace) {
+									for (FieldInstance f : field.getAllHierarchyMembers()) {
+										f.setUid(uid);
+									}
+								}
+							}
+						}
+
 						counts[5]++;
 					}
 				}
@@ -190,6 +282,29 @@ public class Mappings {
 					} else {
 						if (field.getMappedComment() == null || replace) field.setMappedComment(comment);
 						counts[6]++;
+					}
+				}
+
+				@Override
+				public void acceptMeta(String key, String value) {
+					if (!isNames) {
+						switch (key) {
+						case Mappings.metaUidNextClass: {
+							int val = Integer.parseInt(value);
+							if (replace || env.getGlobal().nextClassUid < val) env.getGlobal().nextClassUid = val;
+							break;
+						}
+						case Mappings.metaUidNextMethod: {
+							int val = Integer.parseInt(value);
+							if (replace || env.getGlobal().nextMethodUid < val) env.getGlobal().nextMethodUid = val;
+							break;
+						}
+						case Mappings.metaUidNextField: {
+							int val = Integer.parseInt(value);
+							if (replace || env.getGlobal().nextFieldUid < val) env.getGlobal().nextFieldUid = val;
+							break;
+						}
+						}
 					}
 				}
 			});
@@ -222,12 +337,12 @@ public class Mappings {
 
 		try (MappingWriter writer = new MappingWriter(file, format, srcType, dstType)) {
 			for (ClassInstance cls : classes) {
-				String srcClsName = getName(cls, srcType);
+				String srcClsName = cls.getName(srcType);
 				if (srcClsName == null) continue;
 
-				String dstClsName = getName(cls, dstType);
+				String dstClsName = cls.getName(dstType);
 
-				if (dstClsName != null && (dstClsName.equals(srcClsName) || dstType == NameType.MAPPED && cls.hasNoFullyMappedName())) {
+				if (dstClsName != null && (dstClsName.equals(srcClsName) || dstType != dstType.withMapped(false) && cls.hasNoFullyMappedName())) {
 					// don't save no-op or partial mappings (partial = only outer class is mapped)
 					dstClsName = null;
 				}
@@ -254,9 +369,9 @@ public class Mappings {
 				methods.sort(MemberInstance.nameComparator);
 
 				for (MethodInstance m : methods) {
-					String srcName = getName(m, srcType);
+					String srcName = m.getName(srcType);
 					String desc = getDesc(m, srcType);
-					String dstName = getName(m, dstType);
+					String dstName = m.getName(dstType);
 
 					if (dstName != null && dstName.equals(srcName)) {
 						dstName = null;
@@ -277,15 +392,21 @@ public class Mappings {
 
 					if (format.supportsArgs) {
 						for (MethodVarInstance arg : m.getArgs()) {
-							String argName = arg.getMappedName();
-							if (argName != null) writer.acceptMethodArg(srcClsName, srcName, desc, arg.getIndex(), arg.getLvIndex(), argName);
+							String dstVarName = arg.getName(dstType);
+
+							if (dstVarName != null && !dstVarName.equals(arg.getName(srcType))) {
+								writer.acceptMethodArg(srcClsName, srcName, desc, arg.getIndex(), arg.getLvIndex(), dstVarName);
+							}
 						}
 					}
 
 					if (format.supportsLocals) {
 						for (MethodVarInstance var : m.getVars()) {
-							String varName = var.getMappedName();
-							if (varName != null) writer.acceptMethodVar(srcClsName, srcName, desc, var.getIndex(), var.getLvIndex(), varName);
+							String dstVarName = var.getName(dstType);
+
+							if (dstVarName != null && !dstVarName.equals(var.getName(srcType))) {
+								writer.acceptMethodVar(srcClsName, srcName, desc, var.getIndex(), var.getLvIndex(), dstVarName);
+							}
 						}
 					}
 				}
@@ -301,9 +422,9 @@ public class Mappings {
 				fields.sort(MemberInstance.nameComparator);
 
 				for (FieldInstance f : fields) {
-					String srcName = getName(f, srcType);
+					String srcName = f.getName(srcType);
 					String desc = getDesc(f, srcType);
-					String dstName = getName(f, dstType);
+					String dstName = f.getName(dstType);
 
 					if (dstName != null && dstName.equals(srcName)) {
 						dstName = null;
@@ -326,38 +447,43 @@ public class Mappings {
 		return true;
 	}
 
-	private static String getName(IMatchable<?> m, NameType type) {
-		switch (type) {
-		case PLAIN: return m.getName();
-		case MAPPED: return m.isNameObfuscated() ? m.getMappedName() : m.getName();
-		case TMP: return m.isNameObfuscated() ? m.getTmpName(true) : m.getName();
-		case UID: return m.isNameObfuscated() ? m.getUidString() : m.getName();
-		default: throw new IllegalArgumentException();
-		}
-	}
-
 	private static boolean shouldExport(MethodInstance method, MappingFormat format, NameType srcType, NameType dstType, MappingsExportVerbosity verbosity, Set<Set<MethodInstance>> exportedHierarchies) {
-		String srcName = getName(method, srcType);
-		String dstName;
-
-		return getName(method, srcType) != null
-				&& (format.supportsComments && method.getMappedComment() != null
-				|| format.supportsArgs && method.hasMappedArg()
-				|| (dstName = getName(method, dstType)) != null && !srcName.equals(dstName) && shouldExportName(method, verbosity, exportedHierarchies));
-	}
-
-	private static boolean shouldExport(FieldInstance field, MappingFormat format, NameType srcType, NameType dstType) {
-		String srcName = getName(field, srcType);
+		String srcName = method.getName(srcType);
 		String dstName;
 
 		return srcName != null
-				&& ((dstName = getName(field, dstType)) != null && !srcName.equals(dstName)
+				&& (format.supportsComments && method.getMappedComment() != null
+				|| format.supportsArgs && (shouldExportAny(method.getArgs(), format, srcType, dstType) || shouldExportAny(method.getVars(), format, srcType, dstType))
+				|| (dstName = method.getName(dstType)) != null && !srcName.equals(dstName) && shouldExportName(method, verbosity, exportedHierarchies));
+	}
+
+	private static boolean shouldExport(MethodVarInstance var, MappingFormat format, NameType srcType, NameType dstType) {
+		String srcName = var.getName(srcType);
+		String dstName = var.getName(dstType);
+
+		return dstName != null && !dstName.equals(srcName);
+	}
+
+	private static boolean shouldExport(FieldInstance field, MappingFormat format, NameType srcType, NameType dstType) {
+		String srcName = field.getName(srcType);
+		String dstName;
+
+		return srcName != null
+				&& ((dstName = field.getName(dstType)) != null && !srcName.equals(dstName)
 				|| format.supportsComments && field.getMappedComment() != null);
 	}
 
 	private static boolean shouldExportAny(MethodInstance[] methods, MappingFormat format, NameType srcType, NameType dstType, MappingsExportVerbosity verbosity, Set<Set<MethodInstance>> exportedHierarchies) {
 		for (MethodInstance m : methods) {
 			if (shouldExport(m, format, srcType, dstType, verbosity, exportedHierarchies)) return true;
+		}
+
+		return false;
+	}
+
+	private static boolean shouldExportAny(MethodVarInstance[] vars, MappingFormat format, NameType srcType, NameType dstType) {
+		for (MethodVarInstance v : vars) {
+			if (shouldExport(v, format, srcType, dstType)) return true;
 		}
 
 		return false;
@@ -397,9 +523,9 @@ public class Mappings {
 		if (cls.isPrimitive()) {
 			return cls.getId();
 		} else if (cls.isArray()) {
-			return getName(cls, type);
+			return cls.getName(type);
 		} else {
-			return 'L'+getName(cls, type)+';';
+			return 'L'+cls.getName(type)+';';
 		}
 	}
 
@@ -423,4 +549,8 @@ public class Mappings {
 			}
 		}
 	}
+
+	public static final String metaUidNextClass = "uid-next-class";
+	public static final String metaUidNextMethod = "uid-next-method";
+	public static final String metaUidNextField = "uid-next-field";
 }

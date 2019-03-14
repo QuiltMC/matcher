@@ -19,12 +19,14 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 
+import matcher.NameType;
 import matcher.Util;
 import matcher.bcremap.AsmClassRemapper;
 import matcher.bcremap.AsmRemapper;
+import matcher.classifier.ClassifierUtil;
 import matcher.type.Signature.ClassSignature;
 
-public class ClassInstance implements IMatchable<ClassInstance> {
+public final class ClassInstance implements Matchable<ClassInstance> {
 	/**
 	 * Create a shared unknown class.
 	 */
@@ -93,9 +95,69 @@ public class ClassInstance implements IMatchable<ClassInstance> {
 	}
 
 	@Override
-	public String getDisplayName(boolean full, boolean mapped, boolean tmpNamed, boolean localOnly) {
+	public String getName(NameType type) {
+		if (type == NameType.PLAIN) {
+			return getName();
+		} else if (elementClass != null) {
+			String ret = elementClass.getName(type);
+
+			return elementClass.isPrimitive() || elementClass.isArray() ? "["+ret : "[L"+ret+";";
+		} else if (type == NameType.UID_PLAIN) {
+			int uid = getUid();
+			if (uid >= 0) return env.getGlobal().classUidPrefix+uid;
+		}
+
+		boolean mapped = type == NameType.MAPPED_PLAIN || type == NameType.MAPPED_TMP_PLAIN || type == NameType.MAPPED_LOCTMP_PLAIN;
+		boolean tmp = type == NameType.MAPPED_TMP_PLAIN || type == NameType.TMP_PLAIN;
+		boolean locTmp = type == NameType.MAPPED_LOCTMP_PLAIN || type == NameType.LOCTMP_PLAIN;
+		String ret;
+
+		if (mapped && mappedName != null) {
+			// MAPPED_*, local name available
+			ret = mappedName;
+		} else if (mapped && matchedClass != null && matchedClass.mappedName != null) {
+			// MAPPED_*, remote name available
+			ret = matchedClass.mappedName;
+		} else if (tmp && (nameObfuscated || !mapped) && matchedClass != null && matchedClass.tmpName != null) {
+			// MAPPED_TMP_* with obf name or TMP_*, remote name available
+			ret = matchedClass.tmpName;
+		} else if ((tmp || locTmp) && (nameObfuscated || !mapped) && tmpName != null) {
+			// MAPPED_TMP_* or MAPPED_LOCTMP_* with obf name or TMP_* or LOCTMP_*, local name available
+			ret = tmpName;
+		} else {
+			ret = getName(id);
+
+			if (outerClass != null) {
+				ret = ret.substring(ret.lastIndexOf('$') + 1);
+			}
+		}
+
+		return outerClass != null ? outerClass.getName(type) + '$' + ret : ret;
+	}
+
+	@Override
+	public String getDisplayName(NameType type, boolean full) {
+		char lastChar = id.charAt(id.length() - 1);
+		String ret;
+
+		if (lastChar != ';') { // primitive or primitive array
+			switch (lastChar) {
+			case 'B': ret = "byte"; break;
+			case 'C': ret = "char"; break;
+			case 'D': ret = "double"; break;
+			case 'F': ret = "float"; break;
+			case 'I': ret = "int"; break;
+			case 'J': ret = "long"; break;
+			case 'S': ret = "short"; break;
+			case 'V': ret = "void"; break;
+			case 'Z': ret = "boolean"; break;
+			default: throw new IllegalStateException("invalid class desc: "+id);
+			}
+		} else {
+			ret = getName(type).replace('/', '.');
+		}
+
 		int dims = getArrayDimensions();
-		String ret = getName(mapped, tmpNamed, localOnly).replace('/', '.');
 
 		if (dims > 0) {
 			StringBuilder sb = new StringBuilder(ret.length() + dims);
@@ -152,6 +214,56 @@ public class ClassInstance implements IMatchable<ClassInstance> {
 		assert cls == null || cls.getEnv() != env && !cls.getEnv().isShared();
 
 		this.matchedClass = cls;
+	}
+
+	@Override
+	public boolean isFullyMatched(boolean recursive) {
+		if (matchedClass == null) return false;
+
+		boolean anyUnmatched = false;
+
+		for (MethodInstance m : methods) {
+			if (!m.hasMatch() || recursive && !m.isFullyMatched(true)) {
+				anyUnmatched = true;
+				break;
+			}
+		}
+
+		if (anyUnmatched) {
+			for (MethodInstance a : methods) {
+				if (a.hasMatch() && (!recursive || a.isFullyMatched(true))) continue;
+
+				// check for any potential match to ignore methods that are impossible to match
+				for (MethodInstance b : matchedClass.methods) {
+					if (!b.hasMatch() && ClassifierUtil.checkPotentialEquality(a, b)) {
+						return false;
+					}
+				}
+			}
+		}
+
+		anyUnmatched = false;
+
+		for (FieldInstance m : fields) {
+			if (!m.hasMatch() || recursive && !m.isFullyMatched(true)) {
+				anyUnmatched = true;
+				break;
+			}
+		}
+
+		if (anyUnmatched) {
+			for (FieldInstance a : fields) {
+				if (a.hasMatch() && (!recursive || a.isFullyMatched(true))) continue;
+
+				for (FieldInstance b : matchedClass.fields) {
+					if (!b.hasMatch() && ClassifierUtil.checkPotentialEquality(a, b)) {
+						return false;
+					}
+				}
+			}
+		}
+
+		return true;
 	}
 
 	@Override
@@ -282,11 +394,13 @@ public class ClassInstance implements IMatchable<ClassInstance> {
 		}
 	}
 
-	public MethodInstance getMethod(String name, String desc, boolean mapped, boolean tmpNamed, boolean unmatchedTmp) {
+	public MethodInstance getMethod(String name, String desc, NameType nameType) {
+		if (nameType == NameType.PLAIN) return getMethod(name, desc);
+
 		MethodInstance ret = null;
 
 		methodLoop: for (MethodInstance method : methods) {
-			String mappedName = method.getName(mapped, tmpNamed, unmatchedTmp);
+			String mappedName = method.getName(nameType);
 
 			if (mappedName != null && !name.equals(mappedName)) {
 				continue;
@@ -333,7 +447,7 @@ public class ClassInstance implements IMatchable<ClassInstance> {
 						assert end != 0;
 					}
 
-					String clsMappedName = match.getName(mapped, tmpNamed, unmatchedTmp);
+					String clsMappedName = match.getName(nameType);
 
 					if (c != 'L') {
 						if (clsMappedName.length() != end - pos || !desc.startsWith(clsMappedName, pos)) continue methodLoop;
@@ -372,20 +486,20 @@ public class ClassInstance implements IMatchable<ClassInstance> {
 		}
 	}
 
-	public FieldInstance getField(String name, String desc, boolean mapped, boolean tmpNamed, boolean unmatchedTmp) {
-		if (!mapped && !tmpNamed || desc != null && !desc.endsWith(";")) return getField(name, desc);
+	public FieldInstance getField(String name, String desc, NameType nameType) {
+		if (nameType == NameType.PLAIN || desc != null && !desc.endsWith(";")) return getField(name, desc);
 
 		FieldInstance ret = null;
 
 		for (FieldInstance field : fields) {
-			String mappedName = field.getName(mapped, tmpNamed, unmatchedTmp);
+			String mappedName = field.getName(nameType);
 
 			if (!name.equals(mappedName)) {
 				continue;
 			}
 
 			if (desc != null) {
-				String clsMappedName = field.type.getName(mapped, tmpNamed, unmatchedTmp);
+				String clsMappedName = field.type.getName(nameType);
 
 				if (desc.endsWith(";")) {
 					if (!desc.equals(clsMappedName)) continue;
@@ -632,22 +746,8 @@ public class ClassInstance implements IMatchable<ClassInstance> {
 	}
 
 	@Override
-	public String getTmpName(boolean localOnly) {
-		String ret;
-
-		if (!localOnly && matchedClass != null && (ret = matchedClass.getTmpName(true)) != null) {
-			return ret;
-		}
-
-		if (tmpName != null) {
-			return tmpName;
-		} else if (elementClass != null) {
-			ret = elementClass.getTmpName(localOnly);
-
-			return elementClass.isPrimitive() || elementClass.isArray() ? "["+ret : "[L"+ret+";";
-		} else {
-			return null;
-		}
+	public boolean hasLocalTmpName() {
+		return tmpName != null;
 	}
 
 	public void setTmpName(String tmpName) {
@@ -674,41 +774,11 @@ public class ClassInstance implements IMatchable<ClassInstance> {
 	}
 
 	@Override
-	public String getUidString() {
-		int uid = getUid();
-		if (uid < 0) return null;
-
-		return "class_"+uid;
-	}
-
 	public boolean hasMappedName() {
 		return mappedName != null
 				|| matchedClass != null && matchedClass.mappedName != null
-				|| elementClass != null && elementClass.hasMappedName();
-	}
-
-	@Override
-	public String getMappedName() {
-		if (mappedName != null) {
-			return mappedName;
-		} else if (matchedClass != null && matchedClass.mappedName != null) {
-			return matchedClass.mappedName;
-		} else if (elementClass != null) {
-			String ret = elementClass.getMappedName();
-			if (ret == null) return null;
-
-			return elementClass.isPrimitive() || elementClass.isArray() ? "["+ret : "[L"+ret+";";
-		} else if (outerClass != null) {
-			int pos = id.lastIndexOf('$');
-			if (pos < 0) return null;
-
-			String ret = outerClass.getMappedName();
-			if (ret == null) return null;
-
-			return ret.concat(id.substring(pos, id.length() - 1));
-		} else {
-			return null;
-		}
+				|| elementClass != null && elementClass.hasMappedName()
+				|| outerClass != null && outerClass.hasMappedName();
 	}
 
 	public boolean hasNoFullyMappedName() {
@@ -846,29 +916,29 @@ public class ClassInstance implements IMatchable<ClassInstance> {
 		return objCls;
 	}
 
-	public void accept(ClassVisitor visitor, boolean mapped, boolean tmpNamed, boolean unmatchedTmp) {
+	public void accept(ClassVisitor visitor, NameType nameType) {
 		ClassNode cn = getMergedAsmNode();
 		if (cn == null) throw new IllegalArgumentException("cls without asm node: "+this);
 
 		synchronized (Util.asmNodeSync) {
-			if (mapped || tmpNamed) {
-				AsmClassRemapper.process(cn, new AsmRemapper(env, mapped, tmpNamed, unmatchedTmp), visitor);
+			if (nameType != NameType.PLAIN) {
+				AsmClassRemapper.process(cn, new AsmRemapper(env, nameType), visitor);
 			} else {
 				cn.accept(visitor);
 			}
 		}
 	}
 
-	public byte[] serialize(boolean mapped, boolean tmpNamed, boolean unmatchedTmp) {
+	public byte[] serialize(NameType nameType) {
 		ClassWriter writer = new ClassWriter(0);
-		accept(writer, mapped, tmpNamed, unmatchedTmp);
+		accept(writer, nameType);
 
 		return writer.toByteArray();
 	}
 
 	@Override
 	public String toString() {
-		return getDisplayName(true, false, false, true);
+		return getDisplayName(NameType.PLAIN, true);
 	}
 
 	void addMethod(MethodInstance method) {

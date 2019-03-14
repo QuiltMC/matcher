@@ -39,7 +39,7 @@ import matcher.classifier.MatchingCache.CacheToken;
 import matcher.type.ClassEnvironment;
 import matcher.type.ClassInstance;
 import matcher.type.FieldInstance;
-import matcher.type.IMatchable;
+import matcher.type.Matchable;
 import matcher.type.MethodInstance;
 import matcher.type.MethodVarInstance;
 
@@ -161,7 +161,7 @@ public class ClassifierUtil {
 		return compareIdentitySets(setA, setB, readOnly, ClassifierUtil::checkPotentialEquality);
 	}
 
-	private static <T extends IMatchable<T>> double compareIdentitySets(Set<T> setA, Set<T> setB, boolean readOnly, BiPredicate<T, T> comparator) {
+	private static <T extends Matchable<T>> double compareIdentitySets(Set<T> setA, Set<T> setB, boolean readOnly, BiPredicate<T, T> comparator) {
 		if (setA.isEmpty() || setB.isEmpty()) {
 			return setA.isEmpty() && setB.isEmpty() ? 1 : 0;
 		}
@@ -247,15 +247,21 @@ public class ClassifierUtil {
 		return compareLists(listA, listB, List::get, List::size, ClassifierUtil::checkPotentialEquality);
 	}
 
-	public static double compareInsns(InsnList listA, InsnList listB, ClassEnvironment env) {
-		return compareLists(listA, listB, InsnList::get, InsnList::size, (inA, inB) -> compareInsns(inA, inB, listA, listB, (list, item) -> list.indexOf(item), env));
+	public static double compareInsns(MethodInstance a, MethodInstance b) {
+		if (a.getAsmNode() == null || b.getAsmNode() == null) return 1;
+
+		InsnList ilA = a.getAsmNode().instructions;
+		InsnList ilB = b.getAsmNode().instructions;
+
+		return compareLists(ilA, ilB, InsnList::get, InsnList::size, (inA, inB) -> compareInsns(inA, inB, ilA, ilB, (list, item) -> list.indexOf(item), a, b, a.getEnv().getGlobal()));
 	}
 
 	public static double compareInsns(List<AbstractInsnNode> listA, List<AbstractInsnNode> listB, ClassEnvironment env) {
-		return compareLists(listA, listB, List::get, List::size, (inA, inB) -> compareInsns(inA, inB, listA, listB, (list, item) -> list.indexOf(item), env));
+		return compareLists(listA, listB, List::get, List::size, (inA, inB) -> compareInsns(inA, inB, listA, listB, (list, item) -> list.indexOf(item), null, null, env));
 	}
 
-	private static <T> boolean compareInsns(AbstractInsnNode insnA, AbstractInsnNode insnB, T listA, T listB, ToIntBiFunction<T, AbstractInsnNode> posProvider, ClassEnvironment env) {
+	private static <T> boolean compareInsns(AbstractInsnNode insnA, AbstractInsnNode insnB, T listA, T listB, ToIntBiFunction<T, AbstractInsnNode> posProvider,
+			MethodInstance mthA, MethodInstance mthB, ClassEnvironment env) {
 		if (insnA.getOpcode() != insnB.getOpcode()) return false;
 
 		switch (insnA.getType()) {
@@ -269,7 +275,16 @@ public class ClassifierUtil {
 			VarInsnNode a = (VarInsnNode) insnA;
 			VarInsnNode b = (VarInsnNode) insnB;
 
-			return a.var == b.var;
+			if (mthA != null && mthB != null) {
+				MethodVarInstance varA = mthA.getArgOrVar(a.var, posProvider.applyAsInt(listA, insnA));
+				MethodVarInstance varB = mthB.getArgOrVar(b.var, posProvider.applyAsInt(listB, insnB));
+
+				if (varA != null && varB != null) {
+					return checkPotentialEquality(varA, varB);
+				}
+			}
+
+			break;
 		}
 		case AbstractInsnNode.TYPE_INSN: {
 			TypeInsnNode a = (TypeInsnNode) insnA;
@@ -374,7 +389,18 @@ public class ClassifierUtil {
 			IincInsnNode a = (IincInsnNode) insnA;
 			IincInsnNode b = (IincInsnNode) insnB;
 
-			return a.var == b.var && a.incr == b.incr;
+			if (a.incr != b.incr) return false;
+
+			if (mthA != null && mthB != null) {
+				MethodVarInstance varA = mthA.getArgOrVar(a.var, posProvider.applyAsInt(listA, insnA));
+				MethodVarInstance varB = mthB.getArgOrVar(b.var, posProvider.applyAsInt(listB, insnB));
+
+				if (varA != null && varB != null) {
+					return checkPotentialEquality(varA, varB);
+				}
+			}
+
+			break;
 		}
 		case AbstractInsnNode.TABLESWITCH_INSN: {
 			TableSwitchInsnNode a = (TableSwitchInsnNode) insnA;
@@ -487,14 +513,14 @@ public class ClassifierUtil {
 		InsnList ilB = b.getAsmNode().instructions;
 
 		if (ilA.size() * ilB.size() < 1000) {
-			return mapInsns(ilA, ilB, a.getEnv().getGlobal());
+			return mapInsns(ilA, ilB, a, b, a.getEnv().getGlobal());
 		} else {
-			return a.getEnv().getGlobal().getCache().compute(ilMapCacheToken, a, b, (mA, mB) -> mapInsns(mA.getAsmNode().instructions, mB.getAsmNode().instructions, mA.getEnv().getGlobal()));
+			return a.getEnv().getGlobal().getCache().compute(ilMapCacheToken, a, b, (mA, mB) -> mapInsns(mA.getAsmNode().instructions, mB.getAsmNode().instructions, mA, mB, mA.getEnv().getGlobal()));
 		}
 	}
 
-	public static int[] mapInsns(InsnList listA, InsnList listB, ClassEnvironment env) {
-		return mapLists(listA, listB, InsnList::get, InsnList::size, (inA, inB) -> compareInsns(inA, inB, listA, listB, (list, item) -> list.indexOf(item), env));
+	public static int[] mapInsns(InsnList listA, InsnList listB, MethodInstance mthA, MethodInstance mthB, ClassEnvironment env) {
+		return mapLists(listA, listB, InsnList::get, InsnList::size, (inA, inB) -> compareInsns(inA, inB, listA, listB, (list, item) -> list.indexOf(item), mthA, mthB, env));
 	}
 
 	private static <T, U> int[] mapLists(T listA, T listB, ListElementRetriever<T, U> elementRetriever, ListSizeRetriever<T> sizeRetriever, BiPredicate<U, U> elementComparator) {
@@ -595,15 +621,15 @@ public class ClassifierUtil {
 		return ret;
 	}
 
-	private static interface ListElementRetriever<T, U> {
+	private interface ListElementRetriever<T, U> {
 		U apply(T list, int pos);
 	}
 
-	private static interface ListSizeRetriever<T> {
+	private interface ListSizeRetriever<T> {
 		int apply(T list);
 	}
 
-	public static <T extends IMatchable<T>> List<RankResult<T>> rank(T src, T[] dsts, Collection<IClassifier<T>> classifiers, BiPredicate<T, T> potentialEqualityCheck, ClassEnvironment env, double maxMismatch) {
+	public static <T extends Matchable<T>> List<RankResult<T>> rank(T src, T[] dsts, Collection<IClassifier<T>> classifiers, BiPredicate<T, T> potentialEqualityCheck, ClassEnvironment env, double maxMismatch) {
 		List<RankResult<T>> ret = new ArrayList<>(dsts.length);
 
 		for (T dst : dsts) {
@@ -616,7 +642,7 @@ public class ClassifierUtil {
 		return ret;
 	}
 
-	public static <T extends IMatchable<T>> List<RankResult<T>> rankParallel(T src, T[] dsts, Collection<IClassifier<T>> classifiers, BiPredicate<T, T> potentialEqualityCheck, ClassEnvironment env, double maxMismatch) {
+	public static <T extends Matchable<T>> List<RankResult<T>> rankParallel(T src, T[] dsts, Collection<IClassifier<T>> classifiers, BiPredicate<T, T> potentialEqualityCheck, ClassEnvironment env, double maxMismatch) {
 		return Arrays.stream(dsts)
 				.parallel()
 				.map(dst -> rank(src, dst, classifiers, potentialEqualityCheck, env, maxMismatch))
@@ -625,7 +651,7 @@ public class ClassifierUtil {
 				.collect(Collectors.toList());
 	}
 
-	private static <T extends IMatchable<T>> RankResult<T> rank(T src, T dst, Collection<IClassifier<T>> classifiers, BiPredicate<T, T> potentialEqualityCheck, ClassEnvironment env, double maxMismatch) {
+	private static <T extends Matchable<T>> RankResult<T> rank(T src, T dst, Collection<IClassifier<T>> classifiers, BiPredicate<T, T> potentialEqualityCheck, ClassEnvironment env, double maxMismatch) {
 		assert src.getEnv() != dst.getEnv();
 
 		if (!potentialEqualityCheck.test(src, dst)) return null;
@@ -703,7 +729,7 @@ public class ClassifierUtil {
 		}
 	}
 
-	public static <T extends IMatchable<T>> double classifyPosition(T a, T b,
+	public static <T extends Matchable<T>> double classifyPosition(T a, T b,
 			ToIntFunction<T> positionSupplier,
 			BiFunction<T, Integer, T> siblingSupplier,
 			Function<T, T[]> siblingsSupplier) {
