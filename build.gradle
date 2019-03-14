@@ -6,6 +6,10 @@ plugins {
 
 repositories {
     mavenCentral()
+    maven {
+        name "Fabric"
+        url 'https://maven.fabricmc.net/'
+    }
 }
 
 sourceSets {
@@ -17,12 +21,14 @@ sourceSets {
 
 
 dependencies {
-    compile group: 'com.github.javaparser', name: 'javaparser-core', version: '3.8.2'
+    compile group: 'com.github.javaparser', name: 'javaparser-core', version: '3.8.3'
+    compile 'org.bitbucket.mstrobel:procyon-compilertools:0.5.33.6'
     compile "org.ow2.asm:asm:7.0"
     compile "org.ow2.asm:asm-commons:7.0"
     compile "org.ow2.asm:asm-tree:7.0"
     compile "org.ow2.asm:asm-util:7.0"
-//    compile "org.benf:cfr:0.136"
+    compile "org.benf:cfr:0.140"
+    compile 'org.jetbrains:intellij-fernflower:1.0.0.6'
     compile fileTree(dir: 'libs', include: '*.jar')
 }
 
