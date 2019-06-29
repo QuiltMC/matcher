@@ -1,12 +1,17 @@
 package matcher.gui.menu;
 
+import java.io.IOException;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.PathMatcher;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import javafx.beans.InvalidationListener;
 import javafx.collections.FXCollections;
@@ -88,6 +93,14 @@ public class NewProjectPane extends GridPane {
 			classPathA.clear();
 			classPathA.addAll(classPathB);
 			classPathB.setAll(paths);
+
+			String tmp = nonObfuscatedClassPatternA.getText();
+			nonObfuscatedClassPatternA.setText(nonObfuscatedClassPatternB.getText());
+			nonObfuscatedClassPatternB.setText(tmp);
+
+			tmp = nonObfuscatedMemberPatternA.getText();
+			nonObfuscatedMemberPatternA.setText(nonObfuscatedMemberPatternB.getText());
+			nonObfuscatedMemberPatternB.setText(tmp);
 		});
 		add(hbox, 0, 2, 2, 1);
 
@@ -178,8 +191,26 @@ public class NewProjectPane extends GridPane {
 		Button button = new Button("add");
 		footer.getChildren().add(button);
 		button.setOnAction(event -> {
-			SelectedFile res = Gui.requestFile("Select file to add", window, getInputLoadExtensionFilters(), true);
-			if (res != null && !list.getItems().contains(res.path)) list.getItems().add(res.path);
+			List<SelectedFile> res = Gui.requestFiles("Select file to add", window, getInputLoadExtensionFilters());
+			for (SelectedFile each : res) {
+				if (!list.getItems().contains(each.path)) list.getItems().add(each.path);
+			}
+		});
+
+		Button addDirecotyButton = new Button("add dir");
+		footer.getChildren().add(addDirecotyButton);
+		addDirecotyButton.setOnAction(event -> {
+			Path res = Gui.requestDir("Select directory to add", window);
+			try (Stream<Path> stream = Files.walk(res, 128)) {
+				stream.filter(Files::isRegularFile)
+				.filter(getInputLoadExtensionMatcher()::matches)
+				.forEach(path -> {
+					if (!list.getItems().contains(path)) {
+						list.getItems().add(path);
+					}
+				});
+			} catch (IOException ignored) {
+			}
 		});
 
 		Button removeButton = new Button("remove");
@@ -266,6 +297,10 @@ public class NewProjectPane extends GridPane {
 
 	private static List<ExtensionFilter> getInputLoadExtensionFilters() {
 		return Arrays.asList(new FileChooser.ExtensionFilter("Java archive", "*.jar"));
+	}
+
+	private static PathMatcher getInputLoadExtensionMatcher() {
+		return FileSystems.getDefault().getPathMatcher("glob:**.jar");
 	}
 
 	private Node createMiscPane() {
