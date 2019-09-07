@@ -20,12 +20,12 @@ import matcher.type.MethodInstance;
 import matcher.type.MethodVarInstance;
 
 public class Mappings {
-	public static void load(Path path, MappingFormat format, LocalClassEnv env, final boolean isNames, final boolean replace) throws IOException {
+	public static void load(Path path, MappingFormat format, String nsSource, String nsTarget, LocalClassEnv env, final boolean isNames, final boolean replace) throws IOException {
 		int[] counts = new int[7];
 		Set<String> warnedClasses = new HashSet<>();
 
 		try {
-			MappingReader.read(path, format, new IMappingAcceptor() {
+			MappingReader.read(path, format, nsSource, nsTarget, new IMappingAcceptor() {
 				@Override
 				public void acceptClass(String srcName, String dstName, boolean includesOuterNames) {
 					ClassInstance cls = env.getLocalClsByName(srcName);
@@ -107,7 +107,9 @@ public class Mappings {
 					if (cls == null) {
 						if (warnedClasses.add(srcClsName)) System.out.println("can't find mapped class "+srcClsName);
 					} else if ((method = cls.getMethod(srcName, srcDesc)) == null || !method.isReal()) {
-						System.out.println("can't find mapped method "+srcClsName+"/"+srcName+" ("+(cls.hasMappedName() ? cls.getName(NameType.MAPPED_PLAIN)+"/" : "")+dstName+")");
+						System.out.printf("can't find mapped method %s/%s%s (%s%s)%n",
+								srcClsName, srcName, srcDesc,
+								(cls.hasMappedName() ? cls.getName(NameType.MAPPED_PLAIN)+"/" : ""), dstName);
 					} else {
 						if (isNames) {
 							if (!method.hasMappedName() || replace) {

@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -37,6 +38,7 @@ import matcher.gui.menu.LoadMappingsPane.MappingsLoadSettings;
 import matcher.gui.menu.LoadProjectPane.ProjectLoadSettings;
 import matcher.gui.menu.SaveMappingsPane.MappingsSaveSettings;
 import matcher.mapping.MappingFormat;
+import matcher.mapping.MappingReader;
 import matcher.mapping.Mappings;
 import matcher.serdes.MatchesIo;
 import matcher.type.ClassEnvironment;
@@ -84,7 +86,10 @@ public class FileMenu extends Menu {
 
 		menuItem = new MenuItem("Clear mappings");
 		getItems().add(menuItem);
-		menuItem.setOnAction(event -> Mappings.clear(gui.getMatcher().getEnv()));
+		menuItem.setOnAction(event -> {
+			Mappings.clear(gui.getMatcher().getEnv());
+			gui.onMappingChange();
+		});
 
 		getItems().add(new SeparatorMenuItem());
 
@@ -143,12 +148,6 @@ public class FileMenu extends Menu {
 		Path file = res.path;
 
 		requestProjectLoadSettings(newConfig -> {
-			if (newConfig.paths.isEmpty()) return;
-
-			Config.setInputDirs(newConfig.paths);
-			Config.setVerifyInputFiles(newConfig.verifyFiles);
-			Config.saveAsLast();
-
 			gui.getMatcher().reset();
 			gui.onProjectChange();
 
@@ -172,7 +171,16 @@ public class FileMenu extends Menu {
 		dialog.getDialogPane().setContent(content);
 		dialog.setResultConverter(button -> button == ButtonType.OK ? content.createConfig() : null);
 
-		dialog.showAndWait().ifPresent(consumer);
+		ProjectLoadSettings settings = dialog.showAndWait().orElse(null);
+		if (settings == null) return;
+
+		if (!settings.paths.isEmpty()) {
+			Config.setInputDirs(settings.paths);
+			Config.setVerifyInputFiles(settings.verifyFiles);
+			Config.saveAsLast();
+		}
+
+		consumer.accept(settings);
 	}
 
 	private void loadMappings(MappingFormat format) {
@@ -189,34 +197,39 @@ public class FileMenu extends Menu {
 
 		if (file == null) return;
 
-		Dialog<MappingsLoadSettings> dialog = new Dialog<>();
-		//dialog.initModality(Modality.APPLICATION_MODAL);
-		dialog.setResizable(true);
-		dialog.setTitle("Import Settings");
-		dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+		try {
+			String[] namespaces = MappingReader.getNamespaces(file, format);
 
-		LoadMappingsPane content = new LoadMappingsPane();
-		dialog.getDialogPane().setContent(content);
-		dialog.setResultConverter(button -> button == ButtonType.OK ? content.getSettings() : null);
-		final MappingFormat loadFormat = format;
+			Dialog<MappingsLoadSettings> dialog = new Dialog<>();
+			//dialog.initModality(Modality.APPLICATION_MODAL);
+			dialog.setResizable(true);
+			dialog.setTitle("Import Settings");
+			dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
 
-		dialog.showAndWait().ifPresent(settings -> {
-			try {
-				ClassEnvironment env = gui.getMatcher().getEnv();
-				Mappings.load(file, loadFormat, settings.a ? env.getEnvA() : env.getEnvB(), settings.names, settings.replace);
-			} catch (IOException e) {
-				e.printStackTrace();
-				gui.showAlert(AlertType.ERROR, "Load error", "Error while loading mappings", e.getMessage());
-				return;
-			}
+			LoadMappingsPane content = new LoadMappingsPane(namespaces);
+			dialog.getDialogPane().setContent(content);
+			dialog.setResultConverter(button -> button == ButtonType.OK ? content.getSettings() : null);
+			final MappingFormat loadFormat = format;
 
-			gui.onMappingChange();
-		});
+			Optional<MappingsLoadSettings> result = dialog.showAndWait();
+			if (!result.isPresent()) return;
+
+			MappingsLoadSettings settings = result.get();
+			ClassEnvironment env = gui.getMatcher().getEnv();
+
+			Mappings.load(file, loadFormat, settings.nsSource, settings.nsTarget, settings.a ? env.getEnvA() : env.getEnvB(), settings.names, settings.replace);
+		} catch (IOException e) {
+			e.printStackTrace();
+			gui.showAlert(AlertType.ERROR, "Load error", "Error while loading mappings", e.getMessage());
+			return;
+		}
+
+		gui.onMappingChange();
 	}
 
 	private static List<ExtensionFilter> getMappingLoadExtensionFilters() {
 		MappingFormat[] formats = MappingFormat.values();
-		List<ExtensionFilter> ret = new ArrayList<>(formats.length + 1);
+		List<ExtensionFilter> ret = new ArrayList<>(formats.length + 2);
 		List<String> supportedExtensions = new ArrayList<>(formats.length);
 
 		for (MappingFormat format : formats) {
@@ -224,6 +237,7 @@ public class FileMenu extends Menu {
 		}
 
 		ret.add(new FileChooser.ExtensionFilter("All supported", supportedExtensions));
+		ret.add(new FileChooser.ExtensionFilter("Any", "*.*"));
 
 		for (MappingFormat format : formats) {
 			if (format.hasSingleFile()) ret.add(new FileChooser.ExtensionFilter(format.name, format.getGlobPattern()));
