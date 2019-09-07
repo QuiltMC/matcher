@@ -1,7 +1,8 @@
 plugins {
     id 'java'
     id 'idea'
-    id 'com.github.johnrengelman.shadow' version '1.2.4'
+    id 'com.github.johnrengelman.shadow' version '5.1.0'
+	id 'org.openjfx.javafxplugin' version '0.0.8'
 }
 
 repositories {
@@ -12,24 +13,30 @@ repositories {
     }
 }
 
+sourceCompatibility = 11
+targetCompatibility = 11
+
 sourceSets {
     main {
         java.srcDirs = ['src']
-	resources.srcDirs = ['res']
+		resources.srcDirs = ['res']
     }
 }
 
+javafx {
+	version = "11.0.2"
+	modules = [ 'javafx.controls', 'javafx.web' ]
+}
 
 dependencies {
-    compile group: 'com.github.javaparser', name: 'javaparser-core', version: '3.8.3'
-    compile 'org.bitbucket.mstrobel:procyon-compilertools:0.5.33.6'
-    compile "org.ow2.asm:asm:7.1"
-    compile "org.ow2.asm:asm-commons:7.1"
-    compile "org.ow2.asm:asm-tree:7.1"
-    compile "org.ow2.asm:asm-util:7.1"
-    compile "org.benf:cfr:0.143"
-    compile 'org.jetbrains:intellij-fernflower:1.0.0.6'
-    compile fileTree(dir: 'libs', include: '*.jar')
+    implementation "com.github.javaparser:javaparser-core:3.8.3"
+	implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.33.6"
+	implementation "org.ow2.asm:asm:7.1"
+	implementation "org.ow2.asm:asm-commons:7.1"
+	implementation "org.ow2.asm:asm-tree:7.1"
+	implementation "org.ow2.asm:asm-util:7.1"
+	implementation "org.benf:cfr:0.146"
+	implementation "org.jetbrains:intellij-fernflower:1.0.0.6"
 }
 
 jar {
@@ -38,4 +45,14 @@ jar {
     }
 }
 
-build.dependsOn(shadowJar);
+compileJava {
+	inputs.property("moduleName", projects.name)
+	doFirst {
+		options.compilerArgs = [
+			'--module-path', classpath.asPath,
+		]
+		classpath = files()
+	}
+}
+
+build.dependsOn(shadowJar)
