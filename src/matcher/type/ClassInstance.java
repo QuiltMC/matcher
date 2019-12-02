@@ -114,7 +114,8 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 			if (uid >= 0) return env.getGlobal().classUidPrefix+uid;
 		}
 
-		boolean mapped = type == NameType.MAPPED_PLAIN || type == NameType.MAPPED_TMP_PLAIN || type == NameType.MAPPED_LOCTMP_PLAIN;
+		boolean plain = type != NameType.MAPPED;
+		boolean mapped = type == NameType.MAPPED || type == NameType.MAPPED_PLAIN || type == NameType.MAPPED_TMP_PLAIN || type == NameType.MAPPED_LOCTMP_PLAIN;
 		boolean tmp = type == NameType.MAPPED_TMP_PLAIN || type == NameType.TMP_PLAIN;
 		boolean locTmp = type == NameType.MAPPED_LOCTMP_PLAIN || type == NameType.LOCTMP_PLAIN;
 		String ret;
@@ -137,8 +138,10 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 		} else if ((tmp || locTmp) && tmpName != null) {
 			// MAPPED_TMP_* or MAPPED_LOCTMP_* with obf name or TMP_* or LOCTMP_*, local name available
 			ret = tmpName;
-		} else {
+		} else if (plain) {
 			ret = getInnerName0(getName());
+		} else {
+			ret = null;
 		}
 
 		return outerClass != null ? getNestedName(outerClass.getName(type), ret) : ret;
@@ -577,7 +580,7 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 				assert superClass.id.equals("Ljava/lang/Object;");
 
 				ret = superClass.getMethod(name, desc);
-				if (ret != null && (ret.asmNode == null || (ret.asmNode.access & (Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC)) == Opcodes.ACC_PUBLIC)) return ret;
+				if (ret != null && (!ret.isReal() || (ret.access & (Opcodes.ACC_PUBLIC | Opcodes.ACC_STATIC)) == Opcodes.ACC_PUBLIC)) return ret;
 			}
 
 			return resolveInterfaceMethod(name, desc);
@@ -589,7 +592,7 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 			MethodInstance ret = getMethod(name, "([Ljava/lang/Object;)Ljava/lang/Object;");
 			final int reqFlags = Opcodes.ACC_VARARGS | Opcodes.ACC_NATIVE;
 
-			if (ret != null && (ret.asmNode == null || (ret.asmNode.access & reqFlags) == reqFlags)) {
+			if (ret != null && (!ret.isReal() || (ret.access & reqFlags) == reqFlags)) {
 				return ret;
 			}
 		}
@@ -617,10 +620,10 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 			MethodInstance ret = cls.getMethod(name, desc);
 
 			if (ret != null
-					&& (ret.asmNode == null || (ret.asmNode.access & (Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC)) == 0)) {
+					&& (!ret.isReal() || (ret.access & (Opcodes.ACC_PRIVATE | Opcodes.ACC_STATIC)) == 0)) {
 				matches.add(ret);
 
-				if (ret.asmNode != null && (ret.asmNode.access & Opcodes.ACC_ABSTRACT) == 0) { // jvms prefers the closest non-abstract method
+				if (ret.isReal() && (ret.access & Opcodes.ACC_ABSTRACT) == 0) { // jvms prefers the closest non-abstract method
 					foundNonAbstract = true;
 				}
 			}
@@ -639,7 +642,7 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 			for (Iterator<MethodInstance> it = matches.iterator(); it.hasNext(); ) {
 				MethodInstance m = it.next();
 
-				if (m.asmNode == null || (m.asmNode.access & Opcodes.ACC_ABSTRACT) != 0) {
+				if (!m.isReal() || (m.access & Opcodes.ACC_ABSTRACT) != 0) {
 					it.remove();
 				}
 			}
@@ -1013,7 +1016,11 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 	}
 
 	public static String getNestedName(String outerName, String innerName) {
-		return outerName + '$' + innerName;
+		if (outerName == null || innerName == null) {
+			return null;
+		} else {
+			return outerName + '$' + innerName;
+		}
 	}
 
 	public static final Comparator<ClassInstance> nameComparator = Comparator.comparing(ClassInstance::getId);
