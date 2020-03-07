@@ -31,11 +31,11 @@ javafx {
 dependencies {
     implementation "com.github.javaparser:javaparser-core:3.8.3"
 	implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.33.6"
-	implementation "org.ow2.asm:asm:7.1"
-	implementation "org.ow2.asm:asm-commons:7.1"
-	implementation "org.ow2.asm:asm-tree:7.1"
-	implementation "org.ow2.asm:asm-util:7.1"
-	implementation "org.benf:cfr:0.146"
+	implementation "org.ow2.asm:asm:7.3.1"
+	implementation "org.ow2.asm:asm-commons:7.3.1"
+	implementation "org.ow2.asm:asm-tree:7.3.1"
+	implementation "org.ow2.asm:asm-util:7.3.1"
+	implementation "org.benf:cfr:0.149"
 	implementation "org.jetbrains:intellij-fernflower:1.0.0.6"
 }
 
