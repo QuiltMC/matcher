@@ -115,37 +115,68 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 			if (uid >= 0) return env.getGlobal().classUidPrefix+uid;
 		}
 
-		boolean plain = type != NameType.MAPPED;
-		boolean mapped = type == NameType.MAPPED || type == NameType.MAPPED_PLAIN || type == NameType.MAPPED_TMP_PLAIN || type == NameType.MAPPED_LOCTMP_PLAIN;
-		boolean tmp = type == NameType.MAPPED_TMP_PLAIN || type == NameType.TMP_PLAIN;
 		boolean locTmp = type == NameType.MAPPED_LOCTMP_PLAIN || type == NameType.LOCTMP_PLAIN;
 		String ret;
+		boolean fromMatched; // name retrieved from matched class
 
-		if (mapped && mappedName != null) {
+		if (type.mapped && mappedName != null) {
 			// MAPPED_*, local name available
 			ret = mappedName;
-		} else if (mapped && matchedClass != null && matchedClass.mappedName != null) {
+			fromMatched = false;
+		} else if (type.mapped && matchedClass != null && matchedClass.mappedName != null) {
 			// MAPPED_*, remote name available
 			ret = matchedClass.mappedName;
-		} else if (mapped && !nameObfuscated) {
+			fromMatched = true;
+		} else if (type.mapped && !nameObfuscated) {
 			// MAPPED_*, local deobf
 			ret = getInnerName0(getName());
-		} else if (mapped && matchedClass != null && !matchedClass.nameObfuscated) {
+			fromMatched = false;
+		} else if (type.mapped && matchedClass != null && !matchedClass.nameObfuscated) {
 			// MAPPED_*, remote deobf
-			ret = getInnerName0(matchedClass.getName());
-		} else if (tmp && matchedClass != null && matchedClass.tmpName != null) {
+			ret = matchedClass.getInnerName0(matchedClass.getName());
+			fromMatched = true;
+		} else if (type.aux && auxName != null) {
+			ret = auxName;
+			fromMatched = false;
+		} else if (type.aux && matchedClass != null && matchedClass.auxName != null) {
+			ret = matchedClass.auxName;
+			fromMatched = true;
+		} else if (type.tmp && matchedClass != null && matchedClass.tmpName != null) {
 			// MAPPED_TMP_* with obf name or TMP_*, remote name available
 			ret = matchedClass.tmpName;
-		} else if ((tmp || locTmp) && tmpName != null) {
+			fromMatched = true;
+		} else if ((type.tmp || locTmp) && tmpName != null) {
 			// MAPPED_TMP_* or MAPPED_LOCTMP_* with obf name or TMP_* or LOCTMP_*, local name available
 			ret = tmpName;
-		} else if (plain) {
+			fromMatched = false;
+		} else if (type.plain) {
 			ret = getInnerName0(getName());
+			fromMatched = false;
 		} else {
-			ret = null;
+			return null;
 		}
 
-		return outerClass != null ? getNestedName(outerClass.getName(type), ret) : ret;
+		assert ret == null || !hasOuterName(ret);
+
+		/*
+		 * ret-outer: whether ret's source has an outer class
+		 * this-outer: whether this has an outer class
+		 * has outer class -> assume not normal name with pkg, but plain inner class name
+		 *
+		 * ret-outer this-outer action                    ret-example this-example result-example
+		 *     n         n      ret                        a/b         d/e          a/b
+		 *     n         y      this.outer+ret.strip-pkg   a/b         d/e$f        d/e$b
+		 *     y         n      ret.outer.pkg+ret          a/b$c       d/e          a/c
+		 *     y         y      this.outer+ret             a/b$c       d/e$f        d/e$c
+		 */
+
+		if (!fromMatched || (outerClass == null) == (matchedClass.outerClass == null)) { // ret-outer == this-outer
+			return outerClass != null ? getNestedName(outerClass.getName(type), ret) : ret;
+		} else if (outerClass != null) { // ret is normal name, strip package from ret before concatenating
+			return getNestedName(outerClass.getName(type), ret.substring(ret.lastIndexOf('/') + 1));
+		} else { // ret is an outer name, restore pkg
+			return getNestedName(matchedClass.outerClass.getName(type), ret);
+		}
 	}
 
 	private String getInnerName0(String name) {
@@ -441,7 +472,7 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 		methodLoop: for (MethodInstance method : methods) {
 			String mappedName = method.getName(nameType);
 
-			if (mappedName != null && !name.equals(mappedName)) {
+			if (mappedName == null || !name.equals(mappedName)) {
 				continue;
 			}
 
@@ -466,16 +497,15 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 						match = method.args[idx].type;
 					}
 
-					int dims;
-
 					if (c == '[') { // array cls
-						dims = 1;
+						int dims = 1;
 						while ((c = desc.charAt(++pos)) == '[') dims++;
-					} else {
-						dims = 0;
-					}
 
-					if (match.getArrayDimensions() != dims) continue methodLoop;
+						if (match.getArrayDimensions() != dims) continue methodLoop;
+						match = match.elementClass;
+					} else {
+						if (match.isArray()) continue methodLoop;
+					}
 
 					int end;
 
@@ -487,6 +517,7 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 					}
 
 					String clsMappedName = match.getName(nameType);
+					if (clsMappedName == null) continue methodLoop;
 
 					if (c != 'L') {
 						if (clsMappedName.length() != end - pos || !desc.startsWith(clsMappedName, pos)) continue methodLoop;
@@ -533,12 +564,13 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 		for (FieldInstance field : fields) {
 			String mappedName = field.getName(nameType);
 
-			if (!name.equals(mappedName)) {
+			if (mappedName == null || !name.equals(mappedName)) {
 				continue;
 			}
 
 			if (desc != null) {
 				String clsMappedName = field.type.getName(nameType);
+				if (clsMappedName == null) continue;
 
 				if (desc.startsWith("[") || !desc.endsWith(";")) {
 					if (!desc.equals(clsMappedName)) continue;
@@ -850,6 +882,17 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 		this.mappedComment = comment;
 	}
 
+	@Override
+	public boolean hasAuxName() {
+		return auxName != null;
+	}
+
+	public void setAuxName(String name) {
+		assert name == null || !hasOuterName(name);
+
+		this.auxName = name;
+	}
+
 	public boolean isAssignableFrom(ClassInstance c) {
 		if (c == this) return true;
 		if (isPrimitive()) return false;
@@ -1049,7 +1092,7 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 	private ClassNode[] asmNodes;
 	final boolean nameObfuscated;
 	private final boolean input;
-	final ClassInstance elementClass; // TODO: improve handling of array classes (references etc.)
+	final ClassInstance elementClass; // 0-dim class TODO: improve handling of array classes (references etc.)
 	private ClassSignature signature;
 
 	MethodInstance[] methods = noMethods;
@@ -1077,5 +1120,8 @@ public final class ClassInstance implements Matchable<ClassInstance> {
 
 	private String mappedName;
 	private String mappedComment;
+
+	private String auxName;
+
 	private ClassInstance matchedClass;
 }
