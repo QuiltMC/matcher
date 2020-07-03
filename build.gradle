@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id 'idea'
+	id 'maven-publish'
     id 'com.github.johnrengelman.shadow' version '5.1.0'
 	id 'org.openjfx.javafxplugin' version '0.0.8'
 }
@@ -15,6 +16,8 @@ repositories {
 
 sourceCompatibility = 11
 targetCompatibility = 11
+
+group = 'matcher'
 
 sourceSets {
     main {
@@ -56,3 +59,12 @@ compileJava {
 }
 
 build.dependsOn(shadowJar)
+
+publishing {
+	publications {
+		mavenJava(MavenPublication) {
+			from components.java
+			artifact shadowJar
+		}
+	}
+}
