@@ -1,9 +1,10 @@
 plugins {
     id 'java'
-    id 'idea'
+	id 'application'
 	id 'maven-publish'
     id 'com.github.johnrengelman.shadow' version '5.1.0'
 	id 'org.openjfx.javafxplugin' version '0.0.8'
+	id 'de.jjohannes.extra-java-module-info' version '0.5'
 }
 
 repositories {
@@ -14,10 +15,8 @@ repositories {
     }
 }
 
-sourceCompatibility = 11
-targetCompatibility = 11
-
-group = 'matcher'
+archivesBaseName = 'matcher'
+group = 'net.fabricmc'
 
 sourceSets {
     main {
@@ -31,31 +30,44 @@ javafx {
 	modules = [ 'javafx.controls', 'javafx.web' ]
 }
 
+java {
+	modularity.inferModulePath = true
+	sourceCompatibility = JavaVersion.VERSION_11
+	targetCompatibility = JavaVersion.VERSION_11
+
+	if (!JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_11)) {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(11)
+		}
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	it.options.encoding = "UTF-8"
+	it.options.release = 11
+}
+
 dependencies {
     implementation "com.github.javaparser:javaparser-core:3.8.3"
 	implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.33.6"
-	implementation "org.ow2.asm:asm:7.3.1"
-	implementation "org.ow2.asm:asm-commons:7.3.1"
-	implementation "org.ow2.asm:asm-tree:7.3.1"
-	implementation "org.ow2.asm:asm-util:7.3.1"
-	implementation "org.benf:cfr:0.149"
-	implementation "org.jetbrains:intellij-fernflower:1.0.0.6"
+	implementation "org.ow2.asm:asm:9.0"
+	implementation "org.ow2.asm:asm-commons:9.0"
+	implementation "org.ow2.asm:asm-tree:9.0"
+	implementation "org.ow2.asm:asm-util:9.0"
+	implementation "org.benf:cfr:0.150"
+	implementation "net.fabricmc:fabric-fernflower:1.3.0"
 }
 
-jar {
-    manifest {
-        attributes 'Main-Class': 'matcher.Main'
-    }
+extraJavaModuleInfo {
+	automaticModule("cfr-0.150.jar", "cfr")
+	automaticModule("procyon-compilertools-0.5.33.6.jar", "procyon.compilertools")
+	automaticModule("procyon-core-0.5.33.6.jar", "procyon.core")
+	automaticModule("fabric-fernflower-1.3.0.jar", "intellij.fernflower")
 }
 
-compileJava {
-	inputs.property("moduleName", projects.name)
-	doFirst {
-		options.compilerArgs = [
-			'--module-path', classpath.asPath,
-		]
-		classpath = files()
-	}
+application {
+	mainModule = 'matcher'
+	mainClassName = 'matcher.Main'
 }
 
 build.dependsOn(shadowJar)
