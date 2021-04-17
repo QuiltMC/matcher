@@ -1,28 +1,27 @@
 plugins {
-    id 'java'
+	id 'java-library'
 	id 'application'
 	id 'maven-publish'
-    id 'com.github.johnrengelman.shadow' version '5.1.0'
 	id 'org.openjfx.javafxplugin' version '0.0.8'
 	id 'de.jjohannes.extra-java-module-info' version '0.5'
 }
 
 repositories {
-    mavenCentral()
-    maven {
-        name "Fabric"
-        url 'https://maven.fabricmc.net/'
-    }
+	mavenCentral()
+	maven {
+		name "Quilt"
+		url 'https://maven.quiltmc.org/repository/release/'
+	}
 }
 
 archivesBaseName = 'matcher'
-group = 'net.fabricmc'
+group = 'org.quiltmc'
 
 sourceSets {
-    main {
-        java.srcDirs = ['src']
+	main {
+		java.srcDirs = ['src']
 		resources.srcDirs = ['res']
-    }
+	}
 }
 
 javafx {
@@ -48,35 +47,33 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 dependencies {
-    implementation "com.github.javaparser:javaparser-core:3.8.3"
-	implementation "org.bitbucket.mstrobel:procyon-compilertools:0.5.33.6"
-	implementation "org.ow2.asm:asm:9.0"
+	implementation "com.github.javaparser:javaparser-core:3.8.3"
+	implementation "org.quiltmc:procyon-quilt-compilertools:0.5.35.local"
+	api "org.ow2.asm:asm:9.0"
 	implementation "org.ow2.asm:asm-commons:9.0"
-	implementation "org.ow2.asm:asm-tree:9.0"
+	api "org.ow2.asm:asm-tree:9.0"
 	implementation "org.ow2.asm:asm-util:9.0"
-	implementation "org.benf:cfr:0.150"
-	implementation "net.fabricmc:fabric-fernflower:1.3.0"
+	implementation "org.quiltmc:cfr:0.0.2"
+	implementation "org.quiltmc:quiltflower:1.3.0"
 }
 
+// TODO: Add Automatic-Module-Name to all these in Quilt forks
 extraJavaModuleInfo {
-	automaticModule("cfr-0.150.jar", "cfr")
-	automaticModule("procyon-compilertools-0.5.33.6.jar", "procyon.compilertools")
-	automaticModule("procyon-core-0.5.33.6.jar", "procyon.core")
-	automaticModule("fabric-fernflower-1.3.0.jar", "intellij.fernflower")
+	automaticModule("cfr-0.0.2.jar", "cfr")
+	automaticModule("procyon-quilt-compilertools-0.5.35.local.jar", "procyon.compilertools")
+	automaticModule("procyon-quilt-core-0.5.35.local.jar", "procyon.core")
+	automaticModule("quiltflower-1.3.0.jar", "intellij.fernflower")
 }
 
 application {
 	mainModule = 'matcher'
-	mainClassName = 'matcher.Main'
+	mainClass = 'matcher.Main'
 }
-
-build.dependsOn(shadowJar)
 
 publishing {
 	publications {
 		mavenJava(MavenPublication) {
 			from components.java
-			artifact shadowJar
 		}
 	}
 }
