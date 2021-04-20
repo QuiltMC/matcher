@@ -18,6 +18,7 @@ import javafx.concurrent.Worker.State;
 import javafx.scene.control.Tab;
 import javafx.scene.web.WebView;
 import matcher.NameType;
+import matcher.config.Config;
 import matcher.gui.Gui;
 import matcher.gui.IGuiComponent;
 import matcher.gui.ISelectionProvider;
@@ -145,7 +146,9 @@ public class SourcecodeTab extends Tab implements IGuiComponent {
 	}
 
 	private void displayHtml(String html) {
-		webView.getEngine().loadContent(template.replace("%text%", html));
+		String curTemplate = Config.getDarkTheme() ? darkTemplate : lightTemplate;
+
+		webView.getEngine().loadContent(curTemplate.replace("%text%", html));
 	}
 
 	private double getScrollTop() {
@@ -189,7 +192,8 @@ public class SourcecodeTab extends Tab implements IGuiComponent {
 		}
 	}
 
-	private static final String template = readTemplate("ui/codeview/light.htm");
+	private static final String lightTemplate = readTemplate("ui/codeview/light.htm");
+	private static final String darkTemplate = readTemplate("ui/codeview/dark.htm");
 
 	private final Gui gui;
 	private final ISelectionProvider selectionProvider;
