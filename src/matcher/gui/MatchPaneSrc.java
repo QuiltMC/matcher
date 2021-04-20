@@ -16,6 +16,7 @@ import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import matcher.NameType;
 import matcher.Util;
+import matcher.config.Config;
 import matcher.gui.Gui.SortKey;
 import matcher.type.ClassInstance;
 import matcher.type.FieldInstance;
@@ -173,21 +174,25 @@ public class MatchPaneSrc extends SplitPane implements IFwdGuiComponent, ISelect
 		}
 	}
 
+	// welcome to ternary hell
 	private String getCellStyle(Matchable<?> item) {
+		boolean dark = gui.isUseDarkTheme();
+
 		if (gui.isUseDiffColors()) {
 			final float epsilon = 1e-5f;
 			float similarity = item.getSimilarity();
 
 			if (similarity < epsilon) {
-				return "-fx-text-fill: darkred;";
+				return dark ? "-fx-text-fill: #FF006E;" : "-fx-text-fill: darkred;";
 			} else if (similarity > 1 - epsilon) {
-				return "-fx-text-fill: darkgreen;";
+				return dark ? "-fx-text-fill: #00FF21;" : "-fx-text-fill: darkgreen;";
 			} else {
 				final float hue0 = 30; // red, darkred=0
 				final float hue1 = 90; // green, darkgreen=120
 				final float saturation = 0.8f; // darkred=darkgreen=1
-				final float value0 = 0.645f; // darkred=0.545
-				final float value1 = 0.492f; // darkgreen=0.392
+
+				final float value0 = dark ? 1.0f : 0.645f; // darkred=0.545
+				final float value1 = dark ? 1.0f : 0.492f; // darkgreen=0.392
 
 				float f0 = 1 - similarity;
 				float f1 = similarity;
@@ -205,13 +210,13 @@ public class MatchPaneSrc extends SplitPane implements IFwdGuiComponent, ISelect
 			}
 		} else {
 			if (!item.isMatchable()) {
-				return "-fx-text-fill: dimgray;";
+				return dark ? "-fx-text-fill: silver;" : "-fx-text-fill: dimgray;";
 			} else if (item.getMatch() == null) {
-				return "-fx-text-fill: darkred;";
+				return dark ? "-fx-text-fill: #FF006E;" : "-fx-text-fill: darkred;";
 			} else if (!item.isFullyMatched(false)) { // TODO: change recursive to true once arg+var matching is further implemented
 				return "-fx-text-fill: chocolate;";
 			} else {
-				return "-fx-text-fill: darkgreen;";
+				return dark ? "-fx-text-fill: #00FF21" : "-fx-text-fill: darkgreen;";
 			}
 		}
 	}
