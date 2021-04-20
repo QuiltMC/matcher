@@ -189,7 +189,7 @@ public class SourcecodeTab extends Tab implements IGuiComponent {
 		}
 	}
 
-	private static final String template = readTemplate("ui/SourceCodeTemplate.htm");
+	private static final String template = readTemplate("ui/codeview/light.htm");
 
 	private final Gui gui;
 	private final ISelectionProvider selectionProvider;
