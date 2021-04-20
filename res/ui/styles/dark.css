@@ -1,4 +1,16 @@
 .root {
-    -fx-base: #333333;
-    -fx-control-inner-background: #222222;
+    -fx-base: #3C3F41;
+    -fx-background-color: #3C3F41;
+    -fx-control-inner-background: #3C3F41;
+    -fx-selection-bar: #2c2e2f;
+    -fx-focused-mark-color: -fx-focused-text-base-color;
+    -fx-selection-bar-non-focused: #3C3F41;
+}
+
+.split-pane {
+    -fx-base: #3C3F41;
+}
+
+.menu-bar {
+    -fx-background-color: -fx-control-inner-background;
 }
