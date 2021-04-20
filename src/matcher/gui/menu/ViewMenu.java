@@ -7,6 +7,7 @@ import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleGroup;
 import matcher.NameType;
+import matcher.config.Config;
 import matcher.gui.Gui;
 import matcher.gui.Gui.SortKey;
 import matcher.srcprocess.BuiltinDecompiler;
@@ -105,6 +106,13 @@ public class ViewMenu extends Menu {
 		checkMenuItem.setSelected(gui.getNameType() != gui.getNameType().withMapped(false));
 		checkMenuItem.selectedProperty().addListener((observable, oldValue, newValue) -> {
 			if (newValue != null) gui.setNameType(gui.getNameType().withMapped(newValue));
+		});
+		getItems().add(checkMenuItem);
+
+		checkMenuItem = new CheckMenuItem("Use dark theme");
+		checkMenuItem.setSelected(Config.getDarkTheme()); // hack because this part initializes before the dark theme is set up
+		checkMenuItem.selectedProperty().addListener((observable, oldValue, newValue) -> {
+			if (newValue != null) gui.setUseDarkTheme(newValue);
 		});
 		getItems().add(checkMenuItem);
 

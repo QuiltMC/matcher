@@ -21,6 +21,7 @@ public class Config {
 				setInputDirs(loadList(prefs, lastInputDirsKey, Config::deserializePath));
 				setVerifyInputFiles(prefs.getBoolean(lastVerifyInputFilesKey, true));
 				setUidConfig(new UidConfig(prefs));
+				setDarkTheme(prefs.getBoolean(darkThemeKey, true));
 			}
 		} catch (BackingStoreException e) { }
 	}
@@ -43,6 +44,10 @@ public class Config {
 		return uidConfig;
 	}
 
+	public static boolean getDarkTheme() {
+		return darkTheme;
+	}
+
 	public static boolean setProjectConfig(ProjectConfig config) {
 		if (!config.isValid()) return false;
 
@@ -58,6 +63,10 @@ public class Config {
 
 	public static void setVerifyInputFiles(boolean value) {
 		verifyInputFiles = value;
+	}
+
+	public static void setDarkTheme(boolean value) {
+		darkTheme = value;
 	}
 
 	public static boolean setUidConfig(UidConfig config) {
@@ -76,6 +85,19 @@ public class Config {
 			saveList(root.node(lastInputDirsKey), inputDirs);
 			root.putBoolean(lastVerifyInputFilesKey, verifyInputFiles);
 			uidConfig.save(root);
+
+			root.flush();
+		} catch (BackingStoreException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	// another hack because I misunderstood the purpose of this class, but it should be fine
+	public static void saveDarkTheme() {
+		Preferences root = Preferences.userRoot().node(userPrefFolder);
+
+		try {
+			root.putBoolean(darkThemeKey, darkTheme);
 
 			root.flush();
 		} catch (BackingStoreException e) {
@@ -113,9 +135,12 @@ public class Config {
 	private static final String lastProjectSetupKey = "last-project-setup";
 	private static final String lastInputDirsKey = "last-input-dirs";
 	private static final String lastVerifyInputFilesKey = "last-verify-input-files";
+	private static final String darkThemeKey = "use-dark-theme";
 
 	private static ProjectConfig projectConfig = new ProjectConfig();
 	private static final List<Path> inputDirs = new ArrayList<>();
 	private static boolean verifyInputFiles = true;
 	private static UidConfig uidConfig = new UidConfig();
+
+	private static boolean darkTheme = true;
 }
