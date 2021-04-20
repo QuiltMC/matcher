@@ -218,7 +218,11 @@ public class Gui extends Application {
 	}
 
 	private void updateCss() {
-
+		if (darkTheme) {
+			scene.getStylesheets().add("ui/styles/dark.css");
+		} else {
+			scene.getStylesheets().removeAll("ui/styles/dark.css");
+		}
 	}
 
 	public NameType getNameType() {
