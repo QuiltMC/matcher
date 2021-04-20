@@ -74,9 +74,7 @@ public class SourcecodeTab extends Tab implements IGuiComponent {
 	public void onViewChange() {
 		ClassInstance cls = selectionProvider.getSelectedClass();
 
-		if (cls != null) {
-			update(cls, true);
-		}
+		update(cls, true);
 	}
 
 	private void update(ClassInstance cls, boolean isRefresh) {
