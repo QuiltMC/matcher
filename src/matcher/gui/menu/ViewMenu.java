@@ -110,7 +110,7 @@ public class ViewMenu extends Menu {
 		getItems().add(checkMenuItem);
 
 		checkMenuItem = new CheckMenuItem("Use dark theme");
-		checkMenuItem.setSelected(Config.getDarkTheme()); // hack because this part initializes before the dark theme is set up
+		checkMenuItem.setSelected(Config.getDarkTheme());
 		checkMenuItem.selectedProperty().addListener((observable, oldValue, newValue) -> {
 			if (newValue != null) gui.setUseDarkTheme(newValue);
 		});

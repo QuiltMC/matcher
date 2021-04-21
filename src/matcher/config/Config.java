@@ -92,7 +92,7 @@ public class Config {
 		}
 	}
 
-	// another hack because I misunderstood the purpose of this class, but it should be fine
+	// This should really be in a separate class
 	public static void saveDarkTheme() {
 		Preferences root = Preferences.userRoot().node(userPrefFolder);
 

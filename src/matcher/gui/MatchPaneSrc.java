@@ -174,8 +174,9 @@ public class MatchPaneSrc extends SplitPane implements IFwdGuiComponent, ISelect
 		}
 	}
 
-	// welcome to ternary hell
 	private String getCellStyle(Matchable<?> item) {
+		// TODO: Come up with better solution for determining cell styles
+
 		boolean dark = gui.isUseDarkTheme();
 
 		if (gui.isUseDiffColors()) {
@@ -185,7 +186,7 @@ public class MatchPaneSrc extends SplitPane implements IFwdGuiComponent, ISelect
 			if (similarity < epsilon) {
 				return dark ? "-fx-text-fill: #FF006E;" : "-fx-text-fill: darkred;";
 			} else if (similarity > 1 - epsilon) {
-				return dark ? "-fx-text-fill: #00FF21;" : "-fx-text-fill: darkgreen;";
+				return dark ? "-fx-text-fill: #00FF11;" : "-fx-text-fill: darkgreen;";
 			} else {
 				final float hue0 = 30; // red, darkred=0
 				final float hue1 = 90; // green, darkgreen=120
@@ -216,7 +217,7 @@ public class MatchPaneSrc extends SplitPane implements IFwdGuiComponent, ISelect
 			} else if (!item.isFullyMatched(false)) { // TODO: change recursive to true once arg+var matching is further implemented
 				return "-fx-text-fill: chocolate;";
 			} else {
-				return dark ? "-fx-text-fill: #00FF21" : "-fx-text-fill: darkgreen;";
+				return dark ? "-fx-text-fill: #00FF11;" : "-fx-text-fill: darkgreen;";
 			}
 		}
 	}
