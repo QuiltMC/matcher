@@ -8,7 +8,7 @@ Forked from [FabricMC/Matcher](https://github.com/FabricMC/Matcher), a derivativ
 
 Requires JDK 11.
 
-Build it with `./gradlew build`, run `matcher-all.jar` in `build/libs`. Doesn't work if you launch it from IDE for some reason.
+Run it with `./gradlew run`, build a distribution with `./gradlew distZip`.
 
 ### Credits
 

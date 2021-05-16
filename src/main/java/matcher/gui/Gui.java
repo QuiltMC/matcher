@@ -88,6 +88,7 @@ public class Gui extends Application {
 		}
 
 		darkTheme = Config.getDarkTheme();
+		darkThemeCss = Gui.class.getResource("/ui/styles/dark.css").toExternalForm();
 		updateCss();
 
 		stage.setScene(scene);
@@ -219,9 +220,9 @@ public class Gui extends Application {
 
 	private void updateCss() {
 		if (darkTheme) {
-			scene.getStylesheets().add("ui/styles/dark.css");
+			scene.getStylesheets().add(darkThemeCss);
 		} else {
-			scene.getStylesheets().removeAll("ui/styles/dark.css");
+			scene.getStylesheets().removeAll(darkThemeCss);
 		}
 	}
 
@@ -448,6 +449,7 @@ public class Gui extends Application {
 	private boolean showNonInputs;
 	private boolean useDiffColors;
 
+	private String darkThemeCss;
 	private boolean darkTheme;
 
 	private NameType nameType = NameType.MAPPED_PLAIN;
