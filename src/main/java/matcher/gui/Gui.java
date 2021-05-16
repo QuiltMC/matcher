@@ -39,6 +39,7 @@ import javafx.stage.StageStyle;
 import javafx.stage.Window;
 import matcher.Matcher;
 import matcher.NameType;
+import matcher.config.Config;
 import matcher.gui.menu.MainMenuBar;
 import matcher.srcprocess.BuiltinDecompiler;
 import matcher.type.ClassEnvironment;
@@ -85,6 +86,10 @@ public class Gui extends Application {
 		for (Consumer<Gui> l : loadListeners) {
 			l.accept(this);
 		}
+
+		darkTheme = Config.getDarkTheme();
+		darkThemeCss = Gui.class.getResource("/ui/styles/dark.css").toExternalForm();
+		updateCss();
 
 		stage.setScene(scene);
 		stage.setTitle("Matcher");
@@ -192,6 +197,32 @@ public class Gui extends Application {
 
 		for (IGuiComponent c : components) {
 			c.onViewChange();
+		}
+	}
+
+	public boolean isUseDarkTheme() {
+		return darkTheme;
+	}
+
+	public void setUseDarkTheme(boolean darkTheme) {
+		if (this.darkTheme == darkTheme) return;
+
+		this.darkTheme = darkTheme;
+		Config.setDarkTheme(this.darkTheme);
+		Config.saveDarkTheme();
+
+		updateCss();
+
+		for (IGuiComponent c : components) {
+			c.onViewChange();
+		}
+	}
+
+	private void updateCss() {
+		if (darkTheme) {
+			scene.getStylesheets().add(darkThemeCss);
+		} else {
+			scene.getStylesheets().removeAll(darkThemeCss);
 		}
 	}
 
@@ -417,6 +448,9 @@ public class Gui extends Application {
 	private boolean useClassTreeView;
 	private boolean showNonInputs;
 	private boolean useDiffColors;
+
+	private String darkThemeCss;
+	private boolean darkTheme;
 
 	private NameType nameType = NameType.MAPPED_PLAIN;
 	private BuiltinDecompiler decompiler = BuiltinDecompiler.CFR;
